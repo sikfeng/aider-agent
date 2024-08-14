@@ -1,0 +1,10 @@
+setup.py
+aider_agent/__main__.py
+aider_agent/agent.py
+aider_agent/manager.py
+aider_agent.egg-info/PKG-INFO
+aider_agent.egg-info/SOURCES.txt
+aider_agent.egg-info/dependency_links.txt
+aider_agent.egg-info/entry_points.txt
+aider_agent.egg-info/requires.txt
+aider_agent.egg-info/top_level.txt

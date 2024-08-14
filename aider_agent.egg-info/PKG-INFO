@@ -1,0 +1,10 @@
+Metadata-Version: 2.1
+Name: aider_agent
+Version: 0.0.1
+Summary: Aider is AI pair programming in your terminal
+Home-page: https://github.com/sikfeng/aider-agent
+Requires-Python: >=3.9,<3.13
+Requires-Dist: fastapi
+Requires-Dist: redis
+Requires-Dist: types-redis
+Requires-Dist: uvicorn
