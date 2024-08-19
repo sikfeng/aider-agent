@@ -24,10 +24,10 @@ setup(
     python_requires=">=3.9,<3.13",
     entry_points={
         "console_scripts": [
-            "aider_agent_run = aider_agent.agent:main",
+            "init_aider_agent = aider_agent.aider_agent:main",
             "aider_agent_manager = aider_agent.manager:main",
         ],
     },
-    description="Aider is AI pair programming in your terminal",
+    description="badly written code :sadge",
     url="https://github.com/sikfeng/aider-agent",
 )

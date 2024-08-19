@@ -2,17 +2,41 @@ from fastapi import FastAPI
 
 from aider.coders import Coder
 from aider.models import Model
+from aider.io import InputOutput
 
 import argparse
+
+import litellm
+
+litellm.suppress_debug_info = True
+litellm.set_verbose = False
+litellm.drop_params = True
+
 
 app = FastAPI()
 
 class Agent():
-    def __init__(self) -> None:
-        self.model = Model("azure/gpt-4o")
-        self.coder = Coder.create(main_model=self.model)                                                   
+    def __init__(self, llm_name="azure/gpt-4o") -> None:
+        self.llm_name = "azure/gpt-4o"
+        self.model = Model(llm_name)
+
+        self.io = InputOutput(
+            pretty=False,
+            yes=True,
+        )
+        self.coder = Coder.create(
+            main_model=self.model,
+            io=self.io,
+        )
+        return
 
     def run(self, msg):
+        self.coder = Coder.create(
+            from_coder=self.coder,
+            edit_format=None,
+            summarize_from_coder=False,
+            io=self.io,
+        )
         result = self.coder.run(msg)   
         return str(result)
 
@@ -21,6 +45,7 @@ class Agent():
             from_coder=self.coder,
             edit_format="ask",
             summarize_from_coder=False,
+            io=self.io,
         )
         result = self.run(msg) 
         return str(result)

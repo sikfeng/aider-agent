@@ -1,3 +1,0 @@
-[console_scripts]
-aider_agent_manager = aider_agent.manager:main
-aider_agent_run = aider_agent.agent:main
