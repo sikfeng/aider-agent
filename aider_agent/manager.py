@@ -8,14 +8,15 @@ import logging
 
 import os
 
-import controlflow as cf
-from langchain_community.chat_models import ChatLiteLLM
-
 import litellm
+from litellm import completion
 
 litellm.suppress_debug_info = True
 litellm.set_verbose = False
 litellm.drop_params = True
+
+
+from strictjson import *
 
 app = FastAPI()
 
@@ -28,16 +29,15 @@ class AiderAgent():
     _process = None
     user_access: bool = False
 
-    def __init__(self, repo_dir: str=".", **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, model_name="azure/gpt-4o", repo_dir: str="."):
 
         self.logger = logging.getLogger(f"agent {repo_dir}")
         self.repo_dir = repo_dir
 
         global START_PORT
         while True:
-            process = subprocess.Popen(f"init_aider_agent --port {START_PORT}", cwd=repo_dir, shell=True)
-            self.logger.info(f"Attempt to start agent on port {START_PORT}")
+            process = subprocess.Popen(f"init_aider_agent --port {START_PORT} --model-name {model_name}", cwd=repo_dir, shell=True)
+            self.logger.info(f"Attempt to start agent on port {START_PORT} with model {model_name}")
             self.port = START_PORT
             START_PORT += 1
             try:
@@ -75,30 +75,44 @@ class AiderAgent():
 
 class PlannerAgent():
     def __init__(self, model_name="azure/gpt-4o") -> None:
-        self.model = ChatLiteLLM(model=model_name)
-        self.agent = cf.Agent(name="planner", model=self.model)
+        self.model_name = model_name
+        #self.agent = cf.Agent(name="planner", model=self.model)
         self.logger = logging.getLogger("planner")
         return
 
-    def create_subtasks(self, objective):
-        task = cf.Task(
-            objective=objective,
-            agents=[self.agent]
+    def llm(self, system_prompt: str, user_prompt: str) -> str:
+        
+        # define your own LLM here
+        response = completion(
+            model='azure/gpt4o',
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
         )
+        return response.choices[0].message.content
 
-        task.generate_subtasks()
-        return task
+    def generate_subtasks(self, objective) -> list[str]:
+        system_msg = """You're a diligent software engineer AI.
+
+Create a plan consisting of multiple tasks to complete the provided objective.
+
+Each task should be a discrete, actionable step that contributes to the overall objective. Do not waste time on uneccessary or redundant steps.
+Don't create needless tasks like "document the findings".
+
+DO NOT attempt to implement functionality that the user did not ask for. Only implement what the user asked.
+"""
+
+        res = strict_json(system_prompt = system_msg,
+                            user_prompt = objective,
+                            output_format = {'Plan': 'Array of subtasks, type: Array[str]'},
+                            llm = self.llm)
+        print(res)
+        return res['Plan']
     
     def finetune_subtasks(self, objective, instruction):
         # TODO
-        task = cf.Task(
-            objective=objective,
-            instructions=instruction,
-            agents=[self.agent]
-        )
-
-        task.generate_subtasks()
-        return task
+        return []
 
 class Manager():
     def __init__(self) -> None:
@@ -119,7 +133,7 @@ class Manager():
         return "success"
     
     def init_main_aider_agent(self):
-        agent = AiderAgent(name="main aider agent", repo_dir=".")
+        agent = AiderAgent(model_name="azure/gpt-4o", repo_dir=".")
 
         self.main_aider_agent = agent
         return "success"
@@ -128,35 +142,22 @@ class Manager():
         self.planner_agent = PlannerAgent(model_name)
         return "success"
 
-    def gen_subtasks(self, objective):
-        self.task = self.planner_agent.create_subtasks(objective)
-        subtasks = [f'{i+1}: {t.objective}' for i, t in enumerate(self.task.subtasks)]
-        return str(subtasks)
+    def generate_subtasks(self, objective: str) -> list[str]:
+        self.task = self.planner_agent.generate_subtasks(objective)
+        subtasks = self.task
+        return subtasks
         
     def finetune_subtasks(self, objective, instruction):
-        self.task = self.planner_agent.finetune_subtasks(objective, instruction)
-        subtasks = [f'{i+1}: {t.objective}' for i, t in enumerate(self.task.subtasks)]
-        return str(subtasks)
+        return "TODO"
 
-    def confirm_run_subtasks(self) -> list[str]:
+    def confirm_run_subtasks(self, subtasks) -> list[str]:
         if self.task is None:
-            return ["failed: no task"]
+            return ["failed: no task generated yet"]
         
         #if len(self.aider_agents) == 0:
         #    return "failed: no aider agent"
-        
-        #print(self.task)
-        #return str(self.task)
-        #self.task.agent = None
-        #self.task.agent = [self.aider_agents[name] for name in self.aider_agents]
 
-        #print(self.task)
-
-        #response = self.task.run(agents=[self.aider_agents[name] for name in self.aider_agents])
-
-        tasks = []
-        for i, t in enumerate(self.task.subtasks):
-            tasks.append(t.objective)
+        tasks = subtasks
         
         responses = []
         for i, task in enumerate(tasks):
@@ -173,7 +174,6 @@ class Manager():
 
             If the files you wish to write to do not exist yet, automatically create them.
 """
-            #response = self.main_aider_agent.send_msg("Automatically create new files if they do not exist. " + task)
             response = self.main_aider_agent.send_msg(message)
             print(response)
             responses.append(response)
@@ -197,8 +197,8 @@ manager = Manager()
 
 # create agent                                                                                                                                                             
 @app.post("/init_aider_agent")                                                                                                                                                                                                                                 
-def init_aider_agent(agent_name, repo_dir="."):
-    result = manager.init_aider_agent(agent_name, repo_dir)
+def init_aider_agent(repo_dir="."):
+    result = manager.init_aider_agent(repo_dir)
     return {"result": result}    
 
 #@app.post("/init_planner_agent")                                                                                                                                                                                                                                 
@@ -207,24 +207,24 @@ def init_planner_agent(model_name="azure/gpt-4o"):
     return {"result": result}     
 
 # get agents                                                                                                                                                                       
-#@app.get("/get_agents")                                                                                                                                                                                                                                 
+@app.get("/get_agents")                                                                                                                                                                                                                                 
 def get_agents():                                                                                                                                                                                                             
     return {"result": manager.get_agents()}
 
 # generate subtasks
-@app.post("/gen_subtasks")                                                                                                                                                                                                                                 
-def gen_subtasks(objective):                                                                                                                                                                                                             
-    return {"result": manager.gen_subtasks(objective)}                                                                                                                                                                                                       
+@app.post("/generate_subtasks")                                                                                                                                                                                                                                 
+def generate_subtasks(objective) -> list[str]:                                                                                                                                                                                                           
+    return manager.generate_subtasks(objective)
 
 # finetune subtasks
-#@app.post("/finetune_subtasks")                                                                                                                                                                                                                                 
-def finetune_subtasks(objective, instruction):                                                                                                                                                                                                             
-    return {"result": manager.finetune_subtasks(objective, instruction)}   
+@app.post("/finetune_subtasks")
+def finetune_subtasks(objective, instruction):
+    return manager.finetune_subtasks(objective, instruction)
 
 # confirm run subtasks
-@app.get("/confirm_run_subtasks")                                                                                                                                                                                                                                 
-def confirm_run_subtasks() -> list[str]:
-    return manager.confirm_run_subtasks()
+@app.post("/confirm_run_subtasks")
+def confirm_run_subtasks(subtasks: list[str]) -> list[str]:
+    return manager.confirm_run_subtasks(subtasks)
 
 
 # send a message to aider
@@ -238,10 +238,6 @@ def send_msg(agent_name, msg: str):
 def ask(agent_name, msg: str):                                                                                                                                                                                                                  
     result = manager.ask(agent_name, msg)                                                                                                                                                                                             
     return {"result": result}      
-
-
-
-
 
 def main():
     parser = argparse.ArgumentParser()

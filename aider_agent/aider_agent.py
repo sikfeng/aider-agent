@@ -72,6 +72,7 @@ def ping():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--port', type=int, help='port of agent', default="8080")
+    parser.add_argument('--model-name', type=str, help='name of model to use', default="azure/gpt-4o")
     args = parser.parse_args()
 
     import uvicorn                                                                  
