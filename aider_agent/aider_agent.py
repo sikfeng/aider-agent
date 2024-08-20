@@ -19,7 +19,7 @@ class Agent():
     """
     A class to manage the Aider agent.
     """
-    def __init__(self, llm_name="azure/gpt-4o") -> None:
+    def __init__(self, llm_name: str = "azure/gpt-4o") -> None:
         """
         Initialize the Agent.
 
@@ -38,7 +38,7 @@ class Agent():
         )
         return
 
-    def run(self, msg):
+    def run(self, msg: str) -> str:
         """
         Run the agent with the given message.
 
@@ -54,7 +54,7 @@ class Agent():
         result = self.coder.run(msg)   
         return str(result)
 
-    def ask(self, msg):
+    def ask(self, msg: str) -> str:
         """
         Ask a question to the agent.
 

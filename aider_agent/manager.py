@@ -27,12 +27,12 @@ class AiderAgent():
     A class to manage the Aider agent.
     """
     repo_dir: str = "."
-    port:int = -1
+    port: int = -1
     logger: logging.Logger
-    _process = None
+    _process: subprocess.Popen | None = None
     user_access: bool = False
 
-    def __init__(self, model_name="azure/gpt-4o", repo_dir: str="."):
+    def __init__(self, model_name: str = "azure/gpt-4o", repo_dir: str = "."):
         """
         Initialize the AiderAgent.
 
@@ -60,7 +60,7 @@ class AiderAgent():
             self.logger.info(f"Agent on port {START_PORT} terminated, continue trying...")
 
 
-    def send_msg(self, msg):
+    def send_msg(self, msg: str) -> str:
         """
         Send a message to the Aider agent.
 
@@ -73,7 +73,7 @@ class AiderAgent():
         )
         return response.json()["result"]
 
-    def ask(self, msg):
+    def ask(self, msg: str) -> str:
         """
         Ask a question to the Aider agent.
 
@@ -86,7 +86,7 @@ class AiderAgent():
         )
         return response.json()["result"]
     
-    def check_alive(self):
+    def check_alive(self) -> str:
         """
         Check if the Aider agent process is alive.
 
@@ -103,7 +103,7 @@ class PlannerAgent():
     """
     A class to manage the Planner agent.
     """
-    def __init__(self, model_name="azure/gpt-4o") -> None:
+    def __init__(self, model_name: str = "azure/gpt-4o") -> None:
         """
         Initialize the PlannerAgent.
 
@@ -132,7 +132,7 @@ class PlannerAgent():
         )
         return response.choices[0].message.content
 
-    def generate_subtasks(self, objective) -> list[str]:
+    def generate_subtasks(self, objective: str) -> list[str]:
         """
         Generate a list of subtasks to achieve the given objective.
 
@@ -156,7 +156,7 @@ DO NOT attempt to implement functionality that the user did not ask for. Only im
         print(res)
         return res['Plan']
     
-    def finetune_subtasks(self, objective, instruction):
+    def finetune_subtasks(self, objective: str, instruction: str) -> list[str]:
         """
         Finetune the generated subtasks based on additional instructions.
 
@@ -182,7 +182,7 @@ class Manager():
         self.task = None
         return
 
-    def init_aider_agent(self, repo_dir="."):
+    def init_aider_agent(self, repo_dir: str = ".") -> str:
         """
         Initialize an Aider agent.
 
@@ -198,7 +198,7 @@ class Manager():
         self.aider_agents[repo_dir] = agent
         return "success"
     
-    def init_main_aider_agent(self):
+    def init_main_aider_agent(self) -> str:
         """
         Initialize the main Aider agent.
 
@@ -209,7 +209,7 @@ class Manager():
         self.main_aider_agent = agent
         return "success"
     
-    def init_planner_agent(self, model_name="azure/gpt-4o"):
+    def init_planner_agent(self, model_name: str = "azure/gpt-4o") -> str:
         """
         Initialize the Planner agent.
 
@@ -230,10 +230,10 @@ class Manager():
         subtasks = self.task
         return subtasks
         
-    def finetune_subtasks(self, objective, instruction):
+    def finetune_subtasks(self, objective: str, instruction: str) -> list[str]:
         return "TODO"
 
-    def confirm_run_subtasks(self, subtasks) -> list[str]:
+    def confirm_run_subtasks(self, subtasks: list[str]) -> list[str]:
         """
         Confirm and run the generated subtasks.
 
@@ -269,7 +269,7 @@ class Manager():
         
         return responses
 
-    def get_agents(self):
+    def get_agents(self) -> str:
         """
         Get a list of all initialized Aider agents.
 
