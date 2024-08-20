@@ -7,6 +7,8 @@ import requests
 import logging
 
 import os
+import platform
+from distro import name as distro_name
 
 import litellm
 from litellm import completion
@@ -14,7 +16,6 @@ from litellm import completion
 litellm.suppress_debug_info = True
 litellm.set_verbose = False
 litellm.drop_params = True
-
 
 from strictjson import *
 
@@ -153,7 +154,7 @@ DO NOT attempt to implement functionality that the user did not ask for. Only im
                             user_prompt = objective,
                             output_format = {'Plan': 'Array of subtasks, type: Array[str]'},
                             llm = self.llm)
-        print(res)
+        
         return res['Plan']
     
     def finetune_subtasks(self, objective: str, instruction: str) -> list[str]:
@@ -180,6 +181,27 @@ class Manager():
         self.aider_agents = dict()
         self.logger = logging.getLogger("manager")
         self.task = None
+
+        def _os_name() -> str:
+            current_platform = platform.system()
+            if current_platform == "Linux":
+                return "Linux/" + distro_name(pretty=True)
+            if current_platform == "Windows":
+                return "Windows " + platform.release()
+            if current_platform == "Darwin":
+                return "Darwin/MacOS " + platform.mac_ver()[0]
+            return current_platform
+
+        def _shell_name() -> str:
+            current_platform = platform.system()
+            if current_platform in ("Windows", "nt"):
+                is_powershell = len(os.getenv("PSModulePath", "").split(os.pathsep)) >= 3
+                return "powershell.exe" if is_powershell else "cmd.exe"
+            return os.path.basename(os.getenv("SHELL", "/bin/sh"))
+
+        self.os_name = _os_name()
+        self.shell = _shell_name()
+
         return
 
     def init_aider_agent(self, repo_dir: str = ".") -> str:
@@ -233,6 +255,50 @@ class Manager():
     def finetune_subtasks(self, objective: str, instruction: str) -> list[str]:
         return "TODO"
 
+    def llm(self, system_prompt: str, user_prompt: str) -> str:
+        """
+        Generate a response using the LLM.
+
+        :param system_prompt: The system prompt.
+        :param user_prompt: The user prompt.
+        :return: The response from the LLM.
+        """
+        
+        # define your own LLM here
+        response = completion(
+            model='azure/gpt4o',
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+        )
+        return response.choices[0].message.content
+
+    def check_for_shell_cmds_in_response(self, aider_agent_response):
+        
+        res = strict_json(system_prompt = "Your job is to find out if there are instructions to run any shell commands",
+                            user_prompt = aider_agent_response,
+                            output_format = {'execute': 'Whether there are shell commands to execute, type: bool'},
+                            llm = self.llm)
+        
+        if not res['execute']:
+            return None
+
+        sgpt_prompt = '''Provide only {shell} commands for {os} without any description.
+If there is a lack of details, provide most logical solution.
+Ensure the output is a valid shell command.
+If multiple steps required try to combine them together using &&.
+Provide only plain text without Markdown formatting.
+Do not provide markdown formatting such as ```.
+'''.format(shell = self.shell, os=self.os_name)
+
+        res = strict_json(system_prompt = sgpt_prompt,
+                            user_prompt = aider_agent_response,
+                            output_format = {'command': 'Shell command to execute, type: str'},
+                            llm = self.llm)
+
+        return res['command']
+
     def confirm_run_subtasks(self, subtasks: list[str]) -> list[str]:
         """
         Confirm and run the generated subtasks.
@@ -240,8 +306,8 @@ class Manager():
         :param subtasks: The list of subtasks to run.
         :return: A list of responses from running the subtasks.
         """
-        if self.task is None:
-            return ["failed: no task generated yet"]
+        #if self.task is None:
+        #    return ["failed: no task generated yet"]
         
         #if len(self.aider_agents) == 0:
         #    return "failed: no aider agent"
@@ -266,6 +332,11 @@ class Manager():
             response = self.main_aider_agent.send_msg(message)
             print(response)
             responses.append(response)
+
+            cmd = self.check_for_shell_cmds_in_response(response)
+            print(cmd)
+            if cmd is not None:
+                responses.append("<cmd>" + cmd)
         
         return responses
 
