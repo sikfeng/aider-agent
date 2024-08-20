@@ -110,7 +110,6 @@ class PlannerAgent():
         :param model_name: The name of the model to use.
         """
         self.model_name = model_name
-        #self.agent = cf.Agent(name="planner", model=self.model)
         self.logger = logging.getLogger("planner")
         return
 
@@ -165,13 +164,6 @@ DO NOT attempt to implement functionality that the user did not ask for. Only im
         :param instruction: Additional instructions for finetuning.
         :return: A list of finetuned subtasks.
         """
-        """
-        Finetune the generated subtasks based on additional instructions.
-
-        :param objective: The main objective.
-        :param instruction: Additional instructions for finetuning.
-        :return: A list of finetuned subtasks.
-        """
         # TODO
         return []
 
@@ -190,7 +182,7 @@ class Manager():
         self.task = None
         return
 
-    def init_aider_agent(self, agent_name, repo_dir="."):
+    def init_aider_agent(self, repo_dir="."):
         """
         Initialize an Aider agent.
 
@@ -201,9 +193,9 @@ class Manager():
         if agent_name in self.aider_agents:
             return "error: name already exists"
         
-        agent = AiderAgent(name=agent_name, repo_dir=repo_dir)
+        agent = AiderAgent(repo_dir=repo_dir)
 
-        self.aider_agents[agent_name] = agent
+        self.aider_agents[repo_dir] = agent
         return "success"
     
     def init_main_aider_agent(self):
@@ -276,30 +268,6 @@ class Manager():
             responses.append(response)
         
         return responses
-
-    def send_msg(self, agent_name, msg):
-        """
-        Send a message to a specific Aider agent.
-
-        :param agent_name: The name of the agent.
-        :param msg: The message to send.
-        :return: The response from the agent.
-        """
-        agent = self.aider_agents[agent_name]
-        response = agent.send_msg(msg)
-        return response.text
-
-    def ask(self, agent_name, msg):
-        """
-        Ask a question to a specific Aider agent.
-
-        :param agent_name: The name of the agent.
-        :param msg: The question to ask.
-        :return: The response from the agent.
-        """
-        agent = self.aider_agents[agent_name]
-        response = agent.ask(msg)
-        return response.text
 
     def get_agents(self):
         """
@@ -378,32 +346,6 @@ def confirm_run_subtasks(subtasks: list[str]) -> list[str]:
     """
     return manager.confirm_run_subtasks(subtasks)
 
-
-# send a message to aider
-#@app.post("/msg")
-def send_msg(agent_name, msg: str):
-    """
-    API endpoint to send a message to a specific Aider agent.
-
-    :param agent_name: The name of the agent.
-    :param msg: The message to send.
-    :return: The result of the message.
-    """
-    result = manager.send_msg(agent_name, msg)
-    return {"result": result}
-
-# ask aider
-#@app.post("/ask")                                                                                                                                                                                                                                 
-def ask(agent_name, msg: str):
-    """
-    API endpoint to ask a question to a specific Aider agent.
-
-    :param agent_name: The name of the agent.
-    :param msg: The question to ask.
-    :return: The result of the question.
-    """
-    result = manager.ask(agent_name, msg)                                                                                                                                                                                             
-    return {"result": result}      
 
 def main():
     """
