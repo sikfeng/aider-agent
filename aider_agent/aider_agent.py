@@ -51,7 +51,7 @@ class Agent():
             summarize_from_coder=False,
             io=self.io,
         )
-        result = self.coder.run(msg)   
+        result = self.coder.run(msg)
         return str(result)
 
     def ask(self, msg: str) -> str:
@@ -67,13 +67,13 @@ class Agent():
             summarize_from_coder=False,
             io=self.io,
         )
-        result = self.run(msg) 
+        result = self.run(msg)
         return str(result)
 
 agent = Agent()
 
-# send a message to aider                                                                                                                                                                           
-@app.post("/msg")                                                                                                                                                                                                                                 
+# send a message to aider
+@app.post("/msg")
 def send_msg(msg: str):
     """
     API endpoint to send a message to the agent.
@@ -81,11 +81,11 @@ def send_msg(msg: str):
     :param msg: The message to send.
     :return: The result of the message.
     """
-    result = agent.run(msg)                                                                                                                                                                                             
-    return {"result": result}                
+    result = agent.run(msg)
+    return {"result": result}
 
-# ask aider                                                                                                                                                                           
-@app.post("/ask")                                                                                                                                                                                                                                 
+# ask aider
+@app.post("/ask")
 def ask(msg: str):
     """
     API endpoint to ask a question to the agent.
@@ -93,10 +93,10 @@ def ask(msg: str):
     :param msg: The question to ask.
     :return: The result of the question.
     """
-    result = agent.ask(msg)                                                                                                                                                                                             
+    result = agent.ask(msg)
     return {"result": result}
 
-@app.post("/ping")                                                                                                                                                                                                                                 
+@app.post("/ping")
 def ping():
     """
     API endpoint to ping the agent.
@@ -115,9 +115,8 @@ def main():
     parser.add_argument('--model-name', type=str, help='name of model to use', default="azure/gpt-4o")
     args = parser.parse_args()
 
-    import uvicorn                                                                  
-    uvicorn.run(app, host="0.0.0.0", port=args.port)    
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=args.port)
 
-                                                                                                                                                                                                                 
-if __name__ == "__main__":                                                                                                                                                                                                                          
+if __name__ == "__main__":
     main()

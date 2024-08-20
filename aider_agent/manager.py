@@ -279,8 +279,8 @@ class Manager():
 
 manager = Manager()
 
-# create agent                                                                                                                                                             
-@app.post("/init_aider_agent")                                                                                                                                                                                                                                 
+# create agent
+@app.post("/init_aider_agent")
 def init_aider_agent(repo_dir="."):
     """
     API endpoint to initialize an Aider agent.
@@ -289,9 +289,9 @@ def init_aider_agent(repo_dir="."):
     :return: The result of the initialization.
     """
     result = manager.init_aider_agent(repo_dir)
-    return {"result": result}    
+    return {"result": result}
 
-#@app.post("/init_planner_agent")                                                                                                                                                                                                                                 
+#@app.post("/init_planner_agent")
 def init_planner_agent(model_name="azure/gpt-4o"):
     """
     API endpoint to initialize the Planner agent.
@@ -300,10 +300,10 @@ def init_planner_agent(model_name="azure/gpt-4o"):
     :return: The result of the initialization.
     """
     result = manager.init_planner_agent(model_name)
-    return {"result": result}     
+    return {"result": result}
 
-# get agents                                                                                                                                                                       
-@app.get("/get_agents")                                                                                                                                                                                                                                 
+# get agents
+@app.get("/get_agents")
 def get_agents():
     """
     API endpoint to get a list of all initialized Aider agents.
@@ -313,7 +313,7 @@ def get_agents():
     return {"result": manager.get_agents()}
 
 # generate subtasks
-@app.post("/generate_subtasks")                                                                                                                                                                                                                                 
+@app.post("/generate_subtasks")
 def generate_subtasks(objective) -> list[str]:
     """
     API endpoint to generate subtasks for a given objective.
@@ -364,6 +364,6 @@ def main():
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=args.port)
 
-# Run the application with Uvicorn                                                                                                                                                                                                                  
+# Run the application with Uvicorn
 if __name__ == "__main__":
     main()
