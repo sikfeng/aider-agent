@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 
 from aider.coders import Coder
 from aider.models import Model
@@ -37,6 +38,17 @@ class Agent():
             io=self.io,
         )
         return
+
+    def run_stream(self, msg: str) -> str:
+        self.coder = Coder.create(
+            from_coder=self.coder,
+            edit_format=None,
+            summarize_from_coder=False,
+            io=self.io,
+        )
+        #async for partial_response in self.coder.run_stream(msg):
+        #    yield partial_response
+        return self.coder.run_stream(msg)
 
     def run(self, msg: str) -> str:
         """
@@ -83,6 +95,11 @@ def send_msg(msg: str):
     """
     result = agent.run(msg)
     return {"result": result}
+
+# send a message to aider, but get stream
+@app.post("/run_stream")
+async def run_stream(msg: str):
+    return StreamingResponse(agent.run_stream(msg))
 
 # ask aider
 @app.post("/ask")

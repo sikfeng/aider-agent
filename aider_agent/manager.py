@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 
 import argparse
 
@@ -18,6 +19,7 @@ litellm.set_verbose = False
 litellm.drop_params = True
 
 from strictjson import *
+
 
 app = FastAPI()
 
@@ -74,6 +76,16 @@ class AiderAgent():
         )
         return response.json()["result"]
 
+    async def run_stream(self, msg: str, chunk_size=64) -> str:
+        response = requests.post(
+            f"http://0.0.0.0:{self.port}/run_stream",
+            params={"msg": msg},
+            stream = True
+        )
+        #return response.json()["result"]
+        for partial_response in response.iter_content(chunk_size=chunk_size, decode_unicode=True):
+            yield partial_response
+
     def ask(self, msg: str) -> str:
         """
         Ask a question to the Aider agent.
@@ -87,6 +99,13 @@ class AiderAgent():
         )
         return response.json()["result"]
     
+    def run_cmd(self, cmd: str) -> str:
+        response = requests.post(
+            f"http://0.0.0.0:{self.port}/msg",
+            params={"msg": f"/run {cmd}"},
+        )
+        return response.json()["result"]
+
     def check_alive(self) -> str:
         """
         Check if the Aider agent process is alive.
@@ -202,6 +221,8 @@ class Manager():
         self.os_name = _os_name()
         self.shell = _shell_name()
 
+        self.completed_subtasks = []
+
         return
 
     def init_aider_agent(self, repo_dir: str = ".") -> str:
@@ -299,6 +320,42 @@ Do not provide markdown formatting such as ```.
 
         return res['command']
 
+    async def run_subtask(self, subtask):
+        print('12345678908765432123456789')
+        completed_tasks = ""
+
+        if len(self.completed_subtasks) > 0:
+            completed_tasks = "These are the tasks that you have already completed:\n"
+            completed_tasks += "\n".join([f"{j+1}: {t}" for j, t in enumerate(self.completed_subtasks)])
+        
+        message = f"""{completed_tasks}
+
+        Based on the above completed tasks, you are to complete the following task:
+        {subtask}
+
+        If the files you wish to write to do not exist yet, automatically create them.
+"""
+        response = ""
+
+        async for partial_response in self.main_aider_agent.run_stream(message):
+            response += partial_response.decode("utf-8") 
+            yield partial_response
+
+        self.completed_subtasks.append(subtask)
+
+        #responses.append(response)
+
+        cmd = self.check_for_shell_cmds_in_response(response)
+        #print(cmd)
+        if cmd is not None:
+            #responses.append("<cmd>" + cmd)
+            yield "<suggested_cmd>"
+            #cmd_response = self.main_aider_agent.run_cmd(message)
+            #yield cmd_response
+            yield cmd
+            yield "<suggested_cmd>"
+            
+
     def confirm_run_subtasks(self, subtasks: list[str]) -> list[str]:
         """
         Confirm and run the generated subtasks.
@@ -334,9 +391,10 @@ Do not provide markdown formatting such as ```.
             responses.append(response)
 
             cmd = self.check_for_shell_cmds_in_response(response)
-            print(cmd)
+            #print(cmd)
             if cmd is not None:
-                responses.append("<cmd>" + cmd)
+                responses.append("<execute_cmd>" + cmd + "</execute_cmd>")
+                self.main_aider_agent.run_cmd(message)
         
         return responses
 
@@ -352,7 +410,7 @@ manager = Manager()
 
 # create agent
 @app.post("/init_aider_agent")
-def init_aider_agent(repo_dir="."):
+async def init_aider_agent(repo_dir="."):
     """
     API endpoint to initialize an Aider agent.
 
@@ -362,20 +420,9 @@ def init_aider_agent(repo_dir="."):
     result = manager.init_aider_agent(repo_dir)
     return {"result": result}
 
-#@app.post("/init_planner_agent")
-def init_planner_agent(model_name="azure/gpt-4o"):
-    """
-    API endpoint to initialize the Planner agent.
-
-    :param model_name: The name of the model to use.
-    :return: The result of the initialization.
-    """
-    result = manager.init_planner_agent(model_name)
-    return {"result": result}
-
 # get agents
 @app.get("/get_agents")
-def get_agents():
+async def get_agents():
     """
     API endpoint to get a list of all initialized Aider agents.
 
@@ -385,7 +432,7 @@ def get_agents():
 
 # generate subtasks
 @app.post("/generate_subtasks")
-def generate_subtasks(objective) -> list[str]:
+async def generate_subtasks(objective) -> list[str]:
     """
     API endpoint to generate subtasks for a given objective.
 
@@ -396,7 +443,7 @@ def generate_subtasks(objective) -> list[str]:
 
 # finetune subtasks
 @app.post("/finetune_subtasks")
-def finetune_subtasks(objective, instruction):
+async def finetune_subtasks(objective, instruction):
     """
     API endpoint to finetune the generated subtasks based on additional instructions.
 
@@ -406,9 +453,13 @@ def finetune_subtasks(objective, instruction):
     """
     return manager.finetune_subtasks(objective, instruction)
 
+@app.post("/run_subtask")
+async def run_subtask(subtask):
+    return StreamingResponse(manager.run_subtask(subtask))
+
 # confirm run subtasks
 @app.post("/confirm_run_subtasks")
-def confirm_run_subtasks(subtasks: list[str]) -> list[str]:
+async def confirm_run_subtasks(subtasks: list[str]) -> list[str]:
     """
     API endpoint to confirm and run the generated subtasks.
 
