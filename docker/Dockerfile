@@ -16,7 +16,8 @@ RUN mkdir       /.aider /.cache
 RUN chmod a+rwx /.aider /.cache
 
 # So git doesn't complain about unusual permissions
-RUN git config --system --add safe.directory /workspace
+#RUN git config --system --add safe.directory /workspace
+RUN git config --system --add safe.directory "*"
 
 FROM base AS aider-full
 
@@ -30,5 +31,9 @@ FROM aider-full AS aider-agent
 
 #COPY . /tmp/aider-agent
 #RUN /venv/bin/python -m pip install --no-cache-dir /tmp/aider-agent
+
+COPY requirements.txt /tmp
+RUN /venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements.txt
+RUN rm /tmp/requirements.txt
 
 ENTRYPOINT ["/bin/bash"]
