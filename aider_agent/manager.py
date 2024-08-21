@@ -321,7 +321,6 @@ Do not provide markdown formatting such as ```.
         return res['command']
 
     async def run_subtask(self, subtask):
-        print('12345678908765432123456789')
         completed_tasks = ""
 
         if len(self.completed_subtasks) > 0:
