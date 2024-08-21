@@ -2,5 +2,6 @@ fastapi
 redis
 types-redis
 uvicorn
-litellm
+litellm>=1.43.19
 strictjson
+aider-chat
