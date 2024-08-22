@@ -29,13 +29,13 @@ class AiderAgent():
     """
     A class to manage the Aider agent.
     """
-    repo_dir: str = "."
-    port: int = -1
-    logger: logging.Logger
-    _process: subprocess.Popen | None = None
-    user_access: bool = False
+    repo_dir: str = "."  # Directory of the repository
+    port: int = -1  # Port number for the agent
+    logger: logging.Logger  # Logger instance for the agent
+    _process: subprocess.Popen | None = None  # Subprocess for the agent
+    user_access: bool = False  # Flag to indicate user access
 
-    def __init__(self, model_name: str = "azure/gpt-4o", repo_dir: str = "."):
+    def __init__(self, model_name: str = "azure/gpt-4o", repo_dir: str = ".") -> None:
         """
         Initialize the AiderAgent.
 
@@ -70,13 +70,26 @@ class AiderAgent():
         :param msg: The message to send.
         :return: The response from the agent.
         """
+        """
+        Send a message to the Aider agent.
+
+        :param msg: The message to send.
+        :return: The response from the agent.
+        """
         response = requests.post(
             f"http://0.0.0.0:{self.port}/msg",
             params={"msg": msg},
         )
         return response.json()["result"]
 
-    async def run_stream(self, msg: str, chunk_size=64) -> str:
+    async def run_stream(self, msg: str, chunk_size: int = 64) -> AsyncGenerator[str, None]:
+        """
+        Send a message to the Aider agent and stream the response.
+
+        :param msg: The message to send.
+        :param chunk_size: The size of each chunk in the stream.
+        :return: An async generator yielding parts of the response.
+        """
         response = requests.post(
             f"http://0.0.0.0:{self.port}/run_stream",
             params={"msg": msg},
@@ -102,6 +115,12 @@ class AiderAgent():
         return response.json()["result"]
     
     def run_cmd(self, cmd: str) -> str:
+        """
+        Run a command using the Aider agent.
+
+        :param cmd: The command to run.
+        :return: The response from the agent.
+        """
         response = requests.post(
             f"http://0.0.0.0:{self.port}/msg",
             params={"msg": f"/run {cmd}"},
@@ -109,6 +128,11 @@ class AiderAgent():
         return response.json()["result"]
 
     def check_alive(self) -> str:
+        """
+        Check if the Aider agent process is alive.
+
+        :return: "alive" if the process is running, otherwise "dead".
+        """
         """
         Check if the Aider agent process is alive.
 
@@ -143,6 +167,20 @@ class PlannerAgent():
         :param user_prompt: The user prompt.
         :return: The response from the LLM.
         """
+        """
+        Generate a response using the LLM.
+
+        :param system_prompt: The system prompt.
+        :param user_prompt: The user prompt.
+        :return: The response from the LLM.
+        """
+        """
+        Generate a response using the LLM.
+
+        :param system_prompt: The system prompt.
+        :param user_prompt: The user prompt.
+        :return: The response from the LLM.
+        """
         
         # define your own LLM here
         response = completion(
@@ -155,6 +193,18 @@ class PlannerAgent():
         return response.choices[0].message.content
 
     def generate_subtasks(self, objective: str) -> list[str]:
+        """
+        Generate a list of subtasks to achieve the given objective.
+
+        :param objective: The main objective.
+        :return: A list of subtasks.
+        """
+        """
+        Generate a list of subtasks to achieve the given objective.
+
+        :param objective: The main objective.
+        :return: A list of subtasks.
+        """
         """
         Generate a list of subtasks to achieve the given objective.
 
@@ -179,6 +229,20 @@ DO NOT attempt to implement functionality that the user did not ask for. Only im
         return res['Plan']
     
     def finetune_subtasks(self, objective: str, instruction: str) -> list[str]:
+        """
+        Finetune the generated subtasks based on additional instructions.
+
+        :param objective: The main objective.
+        :param instruction: Additional instructions for finetuning.
+        :return: A list of finetuned subtasks.
+        """
+        """
+        Finetune the generated subtasks based on additional instructions.
+
+        :param objective: The main objective.
+        :param instruction: Additional instructions for finetuning.
+        :return: A list of finetuned subtasks.
+        """
         """
         Finetune the generated subtasks based on additional instructions.
 
@@ -234,6 +298,12 @@ class Manager():
         :param repo_dir: The directory of the repository.
         :return: "success" if the agent is initialized, otherwise an error message.
         """
+        """
+        Initialize an Aider agent.
+
+        :param repo_dir: The directory of the repository.
+        :return: "success" if the agent is initialized, otherwise an error message.
+        """
         
         agent = AiderAgent(repo_dir=repo_dir)
 
@@ -246,12 +316,23 @@ class Manager():
 
         :return: "success" if the agent is initialized.
         """
+        """
+        Initialize the main Aider agent.
+
+        :return: "success" if the agent is initialized.
+        """
         agent = AiderAgent(model_name="azure/gpt-4o", repo_dir=".")
 
         self.main_aider_agent = agent
         return "success"
     
     def init_planner_agent(self, model_name: str = "azure/gpt-4o") -> str:
+        """
+        Initialize the Planner agent.
+
+        :param model_name: The name of the model to use.
+        :return: "success" if the agent is initialized.
+        """
         """
         Initialize the Planner agent.
 
@@ -294,7 +375,13 @@ class Manager():
         )
         return response.choices[0].message.content
 
-    def check_for_shell_cmds_in_response(self, aider_agent_response):
+    def check_for_shell_cmds_in_response(self, aider_agent_response: str) -> str | None:
+        """
+        Check if there are shell commands in the Aider agent response.
+
+        :param aider_agent_response: The response from the Aider agent.
+        :return: The shell command if found, otherwise None.
+        """
         
         res = strict_json(system_prompt = "Your job is to find out if there are instructions to run any shell commands",
                             user_prompt = aider_agent_response,
@@ -319,7 +406,13 @@ Do not provide markdown formatting such as ```.
 
         return res['command']
 
-    async def run_subtask(self, subtask):
+    async def run_subtask(self, subtask: str) -> AsyncGenerator[str, None]:
+        """
+        Run a subtask using the main Aider agent.
+
+        :param subtask: The subtask to run.
+        :return: An async generator yielding parts of the response.
+        """
         completed_tasks = ""
 
         if len(self.completed_subtasks) > 0:
@@ -355,7 +448,12 @@ Do not provide markdown formatting such as ```.
             
         return
 
-    def undo_last_subtask(self):
+    def undo_last_subtask(self) -> str:
+        """
+        Undo the last completed subtask.
+
+        :return: The result of the undo operation.
+        """
         if len(self.completed_subtasks):
             self.completed_subtasks.pop()
             result = self.main_aider_agent.run('/undo')
@@ -363,7 +461,13 @@ Do not provide markdown formatting such as ```.
         else:
             return "error: no previously completed subtasks"
 
-    async def confirm_run_subtasks(self, subtasks: list[str]) -> list[str]:
+    async def confirm_run_subtasks(self, subtasks: list[str]) -> AsyncGenerator[str, None]:
+        """
+        Confirm and run the generated subtasks.
+
+        :param subtasks: The list of subtasks to run.
+        :return: An async generator yielding parts of the response.
+        """
         """
         Confirm and run the generated subtasks.
 
@@ -387,6 +491,11 @@ Do not provide markdown formatting such as ```.
         #return responses
 
     def get_agents(self) -> str:
+        """
+        Get a list of all initialized Aider agents.
+
+        :return: A string representation of the agents.
+        """
         """
         Get a list of all initialized Aider agents.
 
@@ -443,10 +552,21 @@ async def finetune_subtasks(objective, instruction):
 
 @app.post("/run_subtask")
 async def run_subtask(subtask):
+    """
+    API endpoint to run a subtask.
+
+    :param subtask: The subtask to run.
+    :return: The result of running the subtask.
+    """
     return StreamingResponse(manager.run_subtask(subtask))
 
 @app.get("/undo_last_subtask")
 def undo_last_subtask():
+    """
+    API endpoint to undo the last completed subtask.
+
+    :return: The result of the undo operation.
+    """
     return manager.undo_last_subtask()
 
 # confirm run subtasks
@@ -458,15 +578,21 @@ async def confirm_run_subtasks(subtasks: list[str]) -> list[str]:
     :param subtasks: The list of subtasks to run.
     :return: The list of responses from running the subtasks.
     """
+    """
+    API endpoint to confirm and run the generated subtasks.
+
+    :param subtasks: The list of subtasks to run.
+    :return: The list of responses from running the subtasks.
+    """
     return StreamingResponse(manager.confirm_run_subtasks(subtasks))
 
 
-def main():
+def main() -> None:
     """
     Main function to run the application.
     """
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--port', type=int, help='port of agent', default="8080")
+    parser = argparse.ArgumentParser(description="Run the Aider agent manager.")
+    parser.add_argument('--port', type=int, help='Port of the agent', default=8080)
     args = parser.parse_args()
 
     global START_PORT
@@ -475,7 +601,7 @@ def main():
     manager.init_planner_agent()
     manager.init_main_aider_agent()
 
-    import uvicorn
+    import uvicorn  # Import Uvicorn for running the FastAPI app
     uvicorn.run(app, host="0.0.0.0", port=args.port)
 
 # Run the application with Uvicorn
