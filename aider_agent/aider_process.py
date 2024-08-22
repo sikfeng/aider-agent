@@ -27,11 +27,6 @@ class Agent:
 
         :param llm_name: The name of the model to use.
         """
-        """
-        Initialize the Agent.
-
-        :param llm_name: The name of the model to use.
-        """
         self.llm_name = "azure/gpt-4o"
         self.model = Model(llm_name)
 
@@ -69,12 +64,6 @@ class Agent:
         :param msg: The message to process.
         :return: The result of processing the message.
         """
-        """
-        Run the agent with the given message.
-
-        :param msg: The message to process.
-        :return: The result of processing the message.
-        """
         try:
             self.coder = Coder.create(
                 from_coder=self.coder,
@@ -88,12 +77,6 @@ class Agent:
             return "error: failed"
 
     def ask(self, msg: str) -> str:
-        """
-        Ask a question to the agent.
-
-        :param msg: The question to ask.
-        :return: The result of the question.
-        """
         """
         Ask a question to the agent.
 
