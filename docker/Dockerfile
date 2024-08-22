@@ -1,7 +1,7 @@
 FROM python:3.10-slim AS base
 
 RUN apt-get update && \
-    apt-get install --no-install-recommends -y build-essential git libportaudio2 && \
+    apt-get install --no-install-recommends -y build-essential git libportaudio2 gnupg2 && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace

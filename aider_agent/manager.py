@@ -48,22 +48,22 @@ class AiderAgent():
 
         global START_PORT
         while True:
-            process = subprocess.Popen(f"init_aider_agent --port {START_PORT} --model-name {model_name}", cwd=repo_dir, shell=True)
-            self.logger.info(f"Attempt to start agent on port {START_PORT} with model {model_name}")
+            process = subprocess.Popen(f"init_aider_process --port {START_PORT} --model-name {model_name}", cwd=repo_dir, shell=True)
+            self.logger.info(f"Attempt to start an aider process on port {START_PORT} with model {model_name}")
             self.port = START_PORT
             START_PORT += 1
             try:
                 process.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 if process.returncode is None:
-                    self.logger.info(f"Agent on port {START_PORT} still running, assuming successful")
+                    self.logger.info(f"aider process on port {START_PORT} still running, assuming successful")
                     break
-                self.logger.info(f"Agent on port {START_PORT} terminated, continue trying...")
+                self.logger.info(f"aider process on port {START_PORT} terminated, continue trying...")
             # process terminated
             self.logger.info(f"Agent on port {START_PORT} terminated, continue trying...")
 
 
-    def send_msg(self, msg: str) -> str:
+    def run(self, msg: str) -> str:
         """
         Send a message to the Aider agent.
 
@@ -84,6 +84,8 @@ class AiderAgent():
         )
         #return response.json()["result"]
         for partial_response in response.iter_content(chunk_size=chunk_size, decode_unicode=True):
+            if isinstance(partial_response, bytes):
+                partial_response = partial_response.decode('utf-8')
             yield partial_response
 
     def ask(self, msg: str) -> str:
@@ -229,12 +231,9 @@ class Manager():
         """
         Initialize an Aider agent.
 
-        :param agent_name: The name of the agent.
         :param repo_dir: The directory of the repository.
         :return: "success" if the agent is initialized, otherwise an error message.
         """
-        if agent_name in self.aider_agents:
-            return "error: name already exists"
         
         agent = AiderAgent(repo_dir=repo_dir)
 
@@ -337,7 +336,7 @@ Do not provide markdown formatting such as ```.
         response = ""
 
         async for partial_response in self.main_aider_agent.run_stream(message):
-            response += partial_response.decode("utf-8") 
+            response += partial_response
             yield partial_response
 
         self.completed_subtasks.append(subtask)
@@ -348,14 +347,23 @@ Do not provide markdown formatting such as ```.
         #print(cmd)
         if cmd is not None:
             #responses.append("<cmd>" + cmd)
-            yield "<suggested_cmd>"
+            yield "\n<suggested_cmd>"
             #cmd_response = self.main_aider_agent.run_cmd(message)
             #yield cmd_response
             yield cmd
-            yield "<suggested_cmd>"
+            yield "</suggested_cmd>\n"
             
+        return
 
-    def confirm_run_subtasks(self, subtasks: list[str]) -> list[str]:
+    def undo_last_subtask(self):
+        if len(self.completed_subtasks):
+            self.completed_subtasks.pop()
+            result = self.main_aider_agent.run('/undo')
+            return result
+        else:
+            return "error: no previously completed subtasks"
+
+    async def confirm_run_subtasks(self, subtasks: list[str]) -> list[str]:
         """
         Confirm and run the generated subtasks.
 
@@ -368,34 +376,15 @@ Do not provide markdown formatting such as ```.
         #if len(self.aider_agents) == 0:
         #    return "failed: no aider agent"
 
-        tasks = subtasks
-        
         responses = []
-        for i, task in enumerate(tasks):
-            completed_tasks = ""
-
-            if i > 0:
-                completed_tasks = "These are the tasks that you have already completed:\n"
-                completed_tasks += "\n".join([f"{j+1}: {t}" for j, t in enumerate(tasks[:i])])
-            
-            message = f"""{completed_tasks}
-
-            Based on the above completed tasks, you are to complete the following task:
-            {task}
-
-            If the files you wish to write to do not exist yet, automatically create them.
-"""
-            response = self.main_aider_agent.send_msg(message)
-            print(response)
+        for subtask in subtasks:
+            response = ""
+            async for partial_response in self.run_subtask(subtask):
+                response += partial_response
+                yield partial_response
             responses.append(response)
-
-            cmd = self.check_for_shell_cmds_in_response(response)
-            #print(cmd)
-            if cmd is not None:
-                responses.append("<execute_cmd>" + cmd + "</execute_cmd>")
-                self.main_aider_agent.run_cmd(message)
         
-        return responses
+        #return responses
 
     def get_agents(self) -> str:
         """
@@ -456,6 +445,10 @@ async def finetune_subtasks(objective, instruction):
 async def run_subtask(subtask):
     return StreamingResponse(manager.run_subtask(subtask))
 
+@app.get("/undo_last_subtask")
+def undo_last_subtask():
+    return manager.undo_last_subtask()
+
 # confirm run subtasks
 @app.post("/confirm_run_subtasks")
 async def confirm_run_subtasks(subtasks: list[str]) -> list[str]:
@@ -465,7 +458,7 @@ async def confirm_run_subtasks(subtasks: list[str]) -> list[str]:
     :param subtasks: The list of subtasks to run.
     :return: The list of responses from running the subtasks.
     """
-    return manager.confirm_run_subtasks(subtasks)
+    return StreamingResponse(manager.confirm_run_subtasks(subtasks))
 
 
 def main():

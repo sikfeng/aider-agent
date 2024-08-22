@@ -57,14 +57,17 @@ class Agent():
         :param msg: The message to process.
         :return: The result of processing the message.
         """
-        self.coder = Coder.create(
-            from_coder=self.coder,
-            edit_format=None,
-            summarize_from_coder=False,
-            io=self.io,
-        )
-        result = self.coder.run(msg)
-        return str(result)
+        try:
+            self.coder = Coder.create(
+                from_coder=self.coder,
+                edit_format=None,
+                summarize_from_coder=False,
+                io=self.io,
+            )
+            result = self.coder.run(msg)
+            return str(result)
+        except:
+            return "error: failed"
 
     def ask(self, msg: str) -> str:
         """
@@ -111,7 +114,7 @@ def ask(msg: str):
     :return: The result of the question.
     """
     result = agent.ask(msg)
-    return {"result": result}
+    return result
 
 @app.post("/ping")
 def ping():
@@ -121,7 +124,7 @@ def ping():
     :return: "pong" if the agent is alive.
     """
     result = "pong"
-    return {"result": result}     
+    return result
 
 def main():
     """
