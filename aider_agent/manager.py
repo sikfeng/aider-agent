@@ -70,12 +70,6 @@ class AiderAgent():
         :param msg: The message to send.
         :return: The response from the agent.
         """
-        """
-        Send a message to the Aider agent.
-
-        :param msg: The message to send.
-        :return: The response from the agent.
-        """
         response = requests.post(
             f"http://0.0.0.0:{self.port}/msg",
             params={"msg": msg},
@@ -133,11 +127,6 @@ class AiderAgent():
 
         :return: "alive" if the process is running, otherwise "dead".
         """
-        """
-        Check if the Aider agent process is alive.
-
-        :return: "alive" if the process is running, otherwise "dead".
-        """
         poll = self._process.poll()
         if poll == None:
             return "alive"
@@ -160,13 +149,6 @@ class PlannerAgent():
         return
 
     def llm(self, system_prompt: str, user_prompt: str) -> str:
-        """
-        Generate a response using the LLM.
-
-        :param system_prompt: The system prompt.
-        :param user_prompt: The user prompt.
-        :return: The response from the LLM.
-        """
         """
         Generate a response using the LLM.
 
@@ -205,12 +187,6 @@ class PlannerAgent():
         :param objective: The main objective.
         :return: A list of subtasks.
         """
-        """
-        Generate a list of subtasks to achieve the given objective.
-
-        :param objective: The main objective.
-        :return: A list of subtasks.
-        """
         system_msg = """You're a diligent software engineer AI.
 
 Create a plan consisting of multiple tasks to complete the provided objective.
@@ -229,13 +205,6 @@ DO NOT attempt to implement functionality that the user did not ask for. Only im
         return res['Plan']
     
     def finetune_subtasks(self, objective: str, instruction: str) -> list[str]:
-        """
-        Finetune the generated subtasks based on additional instructions.
-
-        :param objective: The main objective.
-        :param instruction: Additional instructions for finetuning.
-        :return: A list of finetuned subtasks.
-        """
         """
         Finetune the generated subtasks based on additional instructions.
 
@@ -298,12 +267,6 @@ class Manager():
         :param repo_dir: The directory of the repository.
         :return: "success" if the agent is initialized, otherwise an error message.
         """
-        """
-        Initialize an Aider agent.
-
-        :param repo_dir: The directory of the repository.
-        :return: "success" if the agent is initialized, otherwise an error message.
-        """
         
         agent = AiderAgent(repo_dir=repo_dir)
 
@@ -316,23 +279,12 @@ class Manager():
 
         :return: "success" if the agent is initialized.
         """
-        """
-        Initialize the main Aider agent.
-
-        :return: "success" if the agent is initialized.
-        """
         agent = AiderAgent(model_name="azure/gpt-4o", repo_dir=".")
 
         self.main_aider_agent = agent
         return "success"
     
     def init_planner_agent(self, model_name: str = "azure/gpt-4o") -> str:
-        """
-        Initialize the Planner agent.
-
-        :param model_name: The name of the model to use.
-        :return: "success" if the agent is initialized.
-        """
         """
         Initialize the Planner agent.
 
@@ -468,12 +420,6 @@ Do not provide markdown formatting such as ```.
         :param subtasks: The list of subtasks to run.
         :return: An async generator yielding parts of the response.
         """
-        """
-        Confirm and run the generated subtasks.
-
-        :param subtasks: The list of subtasks to run.
-        :return: A list of responses from running the subtasks.
-        """
         #if self.task is None:
         #    return ["failed: no task generated yet"]
         
@@ -491,11 +437,6 @@ Do not provide markdown formatting such as ```.
         #return responses
 
     def get_agents(self) -> str:
-        """
-        Get a list of all initialized Aider agents.
-
-        :return: A string representation of the agents.
-        """
         """
         Get a list of all initialized Aider agents.
 
@@ -572,12 +513,6 @@ def undo_last_subtask():
 # confirm run subtasks
 @app.post("/confirm_run_subtasks")
 async def confirm_run_subtasks(subtasks: list[str]) -> list[str]:
-    """
-    API endpoint to confirm and run the generated subtasks.
-
-    :param subtasks: The list of subtasks to run.
-    :return: The list of responses from running the subtasks.
-    """
     """
     API endpoint to confirm and run the generated subtasks.
 
