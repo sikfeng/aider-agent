@@ -30,6 +30,8 @@ def test_get_endpoint(url):
     print()
     return response
 
+test_post_endpoint("http://localhost:8080/init_aider_agent?repo_dir=..%2Fcontinue")
+test_get_endpoint("http://localhost:8080/get_agents")
 test_post_endpoint("http://localhost:8080/generate_subtasks?objective=write%20a%20vscode%20extension%20with%20a%20webview")
 #test_post_endpoint("http://localhost:8080/confirm_run_subtasks", data = [
 #        "Set up a new Visual Studio Code extension project using the Yeoman generator for VS Code extensions.",

@@ -91,6 +91,10 @@ class Agent:
         )
         result = self.run(msg)
         return str(result)
+    
+    def get_repo_map(self) -> str:
+        result = self.get_repo_map()
+        return str(result)
 
 agent = Agent()
 
@@ -127,6 +131,11 @@ def ask(msg: str) -> str:
     :return: The result of the question.
     """
     result = agent.ask(msg)
+    return result
+
+@app.get("/get_repo_map")
+def get_repo_map() -> str:
+    result = agent.get_repo_map()
     return result
 
 @app.post("/ping")

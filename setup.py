@@ -31,6 +31,6 @@ setup(
             "aider_agent_manager = aider_agent.manager:main",
         ],
     },
-    description="badly written code :sadge",
+    description="software dev agents with aider",
     url="https://github.com/sikfeng/aider-agent",
 )

@@ -1,3 +1,13 @@
+'''
+TODO
+------
+Prompt tuning
+SUbtask generation fine tuning
+Uee websockets instead
+Improve external repo context usage
+Better error handling
+'''
+
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 
@@ -21,6 +31,8 @@ litellm.drop_params = True
 from strictjson import *
 
 from typing import AsyncGenerator
+
+import shutil
 
 app = FastAPI()
 
@@ -107,7 +119,7 @@ class AiderAgent():
             f"http://0.0.0.0:{self.port}/ask",
             params={"msg": msg},
         )
-        return response.json()["result"]
+        return str(response.json())
     
     def run_cmd(self, cmd: str) -> str:
         """
@@ -133,6 +145,12 @@ class AiderAgent():
             return "alive"
         else:
             return "dead"
+        
+    def get_repo_map(self) -> str:
+        response = requests.get(
+            f"http://0.0.0.0:{self.port}/get_repo_map"
+        )
+        return response.json()["result"]
 
 
 class PlannerAgent():
@@ -268,6 +286,10 @@ class Manager():
         :param repo_dir: The directory of the repository.
         :return: "success" if the agent is initialized, otherwise an error message.
         """
+        if repo_dir in self.aider_agents:
+            return "error: agent already initialized on this repo dir"
+        
+        # TODO: convert path to a standardized repr, such as abs path
         
         agent = AiderAgent(repo_dir=repo_dir)
 
@@ -294,6 +316,41 @@ class Manager():
         """
         self.planner_agent = PlannerAgent(model_name)
         return "success"
+
+    def find_relevant_code(self, task):
+        results = dict()
+        for repo_path, repo_agent in self.aider_agents.items():
+            prompt = """
+Please look through the repository structure and suggest a list of files that is relevant to the following task.
+
+{task}
+
+Please only provide the full path and return at most 5 files.
+The returned files should be separated by new lines ordered by most to least important and wrapped with ```
+For example:
+```
+file1.py
+file2.py
+```
+"""
+            result = repo_agent.ask(prompt.format(task=task))
+
+            prompt = """
+Please look through the added files and suggest functions that are relevant to the following task.
+
+{task}
+"""
+            result = repo_agent.ask(prompt.format(task=task))
+
+            prompt = """
+Please write these code snippets into a new file `{code_snippet_filename}`, including comments of which files they were found from.
+"""
+            code_snippet_filename = f"code_snippets_{repo_path.replace('-', '')}.txt"
+
+            result = repo_agent.ask(prompt.format(code_snippet_filename=code_snippet_filename))
+
+            results[repo_path] = result
+        return results
 
     def generate_subtasks(self, objective: str) -> list[str]:
         """
@@ -366,6 +423,15 @@ Do not provide markdown formatting such as ```.
         :param subtask: The subtask to run.
         :return: An async generator yielding parts of the response.
         """
+
+        self.find_relevant_code(subtask)
+        for repo_path in self.aider_agents:
+            try:
+                shutil.move(f"{repo_path}/code_snippets_{repo_path.replace('-', '')}.txt", f"code_snippets_{repo_path.replace('-', '')}.txt")
+                self.main_aider_agent.run(f"/read code_snippet_{repo_path.replace('-', '')}.txt")
+            except:
+                pass
+
         completed_tasks = ""
 
         if len(self.completed_subtasks) > 0:
@@ -457,7 +523,7 @@ async def init_aider_agent(repo_dir="."):
     :return: The result of the initialization.
     """
     result = manager.init_aider_agent(repo_dir)
-    return {"result": result}
+    return result
 
 # get agents
 @app.get("/get_agents")
@@ -467,7 +533,7 @@ async def get_agents():
 
     :return: The result containing the list of agents.
     """
-    return {"result": manager.get_agents()}
+    return str(manager.get_agents())
 
 # generate subtasks
 @app.post("/generate_subtasks")
