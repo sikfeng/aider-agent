@@ -2,9 +2,7 @@
 TODO
 ------
 Prompt tuning
-SUbtask generation fine tuning
 Uee websockets instead
-Improve external repo context usage
 Better error handling
 '''
 
@@ -66,7 +64,7 @@ class AiderAgent():
             self.port = START_PORT
             START_PORT += 1
             try:
-                process.wait(timeout=3)
+                process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 if process.returncode is None:
                     self.logger.info(f"aider process on port {START_PORT} still running, assuming successful")
@@ -108,7 +106,7 @@ class AiderAgent():
                 partial_response = partial_response.decode('utf-8')
             yield partial_response
 
-    def ask(self, msg: str) -> str:
+    async def ask(self, msg: str, chunk_size: int = 64) -> AsyncGenerator[str, None]:
         """
         Ask a question to the Aider agent.
 
@@ -118,8 +116,12 @@ class AiderAgent():
         response = requests.post(
             f"http://0.0.0.0:{self.port}/ask",
             params={"msg": msg},
+            stream = True
         )
-        return str(response.json())
+        for partial_response in response.iter_content(chunk_size=chunk_size, decode_unicode=True):
+            if isinstance(partial_response, bytes):
+                partial_response = partial_response.decode('utf-8')
+            yield partial_response
     
     def run_cmd(self, cmd: str) -> str:
         """
@@ -291,7 +293,7 @@ class Manager():
         
         # TODO: convert path to a standardized repr, such as abs path
         
-        agent = AiderAgent(repo_dir=repo_dir)
+        agent = AiderAgent(model_name="azure/gpt-4o", repo_dir=repo_dir)
 
         self.aider_agents[repo_dir] = agent
         return "success"
@@ -317,7 +319,7 @@ class Manager():
         self.planner_agent = PlannerAgent(model_name)
         return "success"
 
-    def find_relevant_code(self, task):
+    async def find_relevant_code(self, task):
         results = dict()
         for repo_path, repo_agent in self.aider_agents.items():
             prompt = """
@@ -333,24 +335,61 @@ file1.py
 file2.py
 ```
 """
-            result = repo_agent.ask(prompt.format(task=task))
+            async for partial_response in repo_agent.ask(prompt.format(task=task)):
+                #print(partial_response, end='')
+                yield partial_response
+            yield '\n'
 
             prompt = """
-Please look through the added files and suggest functions that are relevant to the following task.
+Please look through the added files and suggest code snippets that are most relevant and can be reused for the following task. 
 
 {task}
 """
-            result = repo_agent.ask(prompt.format(task=task))
+            async for partial_response in repo_agent.ask(prompt.format(task=task)):
+                #print(partial_response, end='')
+                yield partial_response
+            yield '\n'
 
-            prompt = """
-Please write these code snippets into a new file `{code_snippet_filename}`, including comments of which files they were found from.
-"""
-            code_snippet_filename = f"code_snippets_{repo_path.replace('-', '')}.txt"
+            prompt = """For the useful code snippets you had found, add comments to show which file they originated from, and a description of what it does."""
+            code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
+            response = ""
+            async for partial_response in repo_agent.run_stream(prompt.format(code_snippet_filename=code_snippet_filename)):
+                response += partial_response
+                yield partial_response
+            yield '\n'
+            
+            code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
+            with open(code_snippet_filename, 'w') as code_snippet_file:
+                code_snippet_file.write(response)
 
-            result = repo_agent.ask(prompt.format(code_snippet_filename=code_snippet_filename))
+            '''prompt = """Please write these code snippets into a new file `{code_snippet_filename}`."""
+            code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
+            async for partial_response in repo_agent.run_stream(prompt.format(code_snippet_filename=code_snippet_filename)):
+                #print(partial_response, end='')
+                yield partial_response
+            yield '\n'
 
-            results[repo_path] = result
-        return results
+            retry_limit = 0
+            while not os.path.isfile(code_snippet_filename) and retry_limit > 0:
+                retry_limit -= 1
+                print(f"error creating {code_snippet_filename}")
+
+                # retry
+                async for partial_response in repo_agent.run_stream(f"""You did not write the code snippets to the file {code_snippet_filename}. 
+Remember, ALL changes to files must use this *SEARCH/REPLACE block* format.
+
+Please look through the added files and suggest code snippets that are relevant to the following task.
+
+{task}
+
+Write these code snippets into a new file `{code_snippet_filename}`. 
+Include comments with their original file names and a description of what the function does."""):
+                    #print(partial_response, end='')
+                    yield partial_response
+                yield '\n'
+                '''
+                
+        return
 
     def generate_subtasks(self, objective: str) -> list[str]:
         """
@@ -424,13 +463,16 @@ Do not provide markdown formatting such as ```.
         :return: An async generator yielding parts of the response.
         """
 
-        self.find_relevant_code(subtask)
+        async for partial_response in self.find_relevant_code(subtask):
+             yield partial_response
+
         for repo_path in self.aider_agents:
+            code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
             try:
-                shutil.move(f"{repo_path}/code_snippets_{repo_path.replace('-', '')}.txt", f"code_snippets_{repo_path.replace('-', '')}.txt")
-                self.main_aider_agent.run(f"/read code_snippet_{repo_path.replace('-', '')}.txt")
+                #shutil.move(f"{repo_path}/{code_snippet_filename}", f"{code_snippet_filename}")
+                self.main_aider_agent.run(f"/read-only {code_snippet_filename}")
             except:
-                pass
+                print(f"error: {code_snippet_filename} not found, skipping")
 
         completed_tasks = ""
 
@@ -438,12 +480,23 @@ Do not provide markdown formatting such as ```.
             completed_tasks = "These are the tasks that you have already completed:\n"
             completed_tasks += "\n".join([f"{j+1}: {t}" for j, t in enumerate(self.completed_subtasks)])
         
-        message = f"""{completed_tasks}
+        message = ""
+        if len(self.completed_subtasks) > 0:
+            message = f"""{completed_tasks}
 
-        Based on the above completed tasks, you are to complete the following task:
-        {subtask}
+Based on the above completed tasks, you are to complete the following task:
+{subtask}
 
-        If the files you wish to write to do not exist yet, automatically create them.
+If the files you wish to write to do not exist yet, automatically create them.
+"""
+        else:
+            message = f"""{completed_tasks}
+
+You are to complete the following task:
+{subtask}
+
+If the files you wish to write to do not exist yet, automatically create them.
+If you wish to edit a file, add the file to the chat.
 """
         response = ""
 
@@ -455,7 +508,7 @@ Do not provide markdown formatting such as ```.
 
         #responses.append(response)
 
-        cmd = self.check_for_shell_cmds_in_response(response)
+        '''cmd = self.check_for_shell_cmds_in_response(response)
         #print(cmd)
         if cmd is not None:
             #responses.append("<cmd>" + cmd)
@@ -463,7 +516,7 @@ Do not provide markdown formatting such as ```.
             #cmd_response = self.main_aider_agent.run_cmd(message)
             #yield cmd_response
             yield cmd
-            yield "</suggested_cmd>\n"
+            yield "</suggested_cmd>\n"'''
             
         return
 
@@ -487,11 +540,6 @@ Do not provide markdown formatting such as ```.
         :param subtasks: The list of subtasks to run.
         :return: An async generator yielding parts of the response.
         """
-        #if self.task is None:
-        #    return ["failed: no task generated yet"]
-        
-        #if len(self.aider_agents) == 0:
-        #    return "failed: no aider agent"
 
         responses = []
         for subtask in subtasks:
@@ -594,7 +642,7 @@ def main() -> None:
     Main function to run the application.
     """
     parser = argparse.ArgumentParser(description="Run the Aider agent manager.")
-    parser.add_argument('--port', type=int, help='Port of the agent', default=8080)
+    parser.add_argument('--port', type=int, help='Port of the agent', default=10000)
     args = parser.parse_args()
 
     global START_PORT

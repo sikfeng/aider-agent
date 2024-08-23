@@ -30,12 +30,15 @@ def test_get_endpoint(url):
     print()
     return response
 
-test_post_endpoint("http://localhost:8080/init_aider_agent?repo_dir=..%2Fcontinue")
-test_get_endpoint("http://localhost:8080/get_agents")
-test_post_endpoint("http://localhost:8080/generate_subtasks?objective=write%20a%20vscode%20extension%20with%20a%20webview")
-#test_post_endpoint("http://localhost:8080/confirm_run_subtasks", data = [
-#        "Set up a new Visual Studio Code extension project using the Yeoman generator for VS Code extensions.",
-#        "Configure the project by updating the package.json file with extension details such as name, displayName, description, version, and publisher."
-#    ])
-test_post_endpoint("http://localhost:8080/run_subtask?subtask=Create%20a%20new%20command%20in%20the%20package.json%20file%20that%20will%20trigger%20the%20webview.")
-test_get_endpoint("http://localhost:8080/undo_last_subtask")
+PORT = 10000
+
+test_post_endpoint(f"http://localhost:{PORT}/init_aider_agent?repo_dir=..%2Fcontinue")
+test_post_endpoint(f"http://localhost:{PORT}/init_aider_agent?repo_dir=..%2Fauto-dev-vscode")
+test_get_endpoint(f"http://localhost:{PORT}/get_agents")
+test_post_endpoint(f"http://localhost:{PORT}/generate_subtasks?objective=write%20a%20vscode%20extension%20with%20a%20webview")
+test_post_endpoint(f"http://localhost:{PORT}/confirm_run_subtasks", data = [
+        "Set up a new Visual Studio Code extension project using the Yeoman generator for VS Code extensions.",
+        "Configure the project by updating the package.json file with extension details such as name, displayName, description, version, and publisher."
+    ])
+test_post_endpoint(f"http://localhost:{PORT}/run_subtask?subtask=Create%20a%20new%20command%20in%20the%20package.json%20file%20that%20will%20trigger%20the%20webview.")
+test_get_endpoint(f"http://localhost:{PORT}/undo_last_subtask")

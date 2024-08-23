@@ -89,12 +89,11 @@ class Agent:
             summarize_from_coder=False,
             io=self.io,
         )
-        result = self.run(msg)
-        return str(result)
+        return self.coder.run_stream(msg)
     
     def get_repo_map(self) -> str:
-        result = self.get_repo_map()
-        return str(result)
+        result = self.coder.get_repo_map()
+        return result
 
 agent = Agent()
 
@@ -123,15 +122,14 @@ async def run_stream(msg: str) -> StreamingResponse:
 
 # ask aider
 @app.post("/ask")
-def ask(msg: str) -> str:
+async def ask(msg: str) -> str:
     """
     API endpoint to ask a question to the agent.
 
     :param msg: The question to ask.
     :return: The result of the question.
     """
-    result = agent.ask(msg)
-    return result
+    return StreamingResponse(agent.ask(msg))
 
 @app.get("/get_repo_map")
 def get_repo_map() -> str:
