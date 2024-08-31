@@ -1,8 +1,10 @@
 '''
 TODO
 ------
+Planning agent doesnt take into account the current state of the repo, so it might generate tasks that are already completed
+External repo agents can be run simultaneously
 Prompt tuning
-Uee websockets instead
+Decide whether to use http or websockets
 Better error handling
 '''
 
@@ -215,7 +217,8 @@ Create a plan consisting of multiple tasks to complete the provided objective.
 Each task should be a discrete, actionable step that contributes to the overall objective. Do not waste time on uneccessary or redundant steps.
 Don't create needless tasks like "document the findings".
 
-DO NOT attempt to implement functionality that the user did not ask for. Only implement what the user asked.
+Do npt implement functionality that the user did not ask for.
+Building, testing and deployment are not required, so do not plan these tasks.
 """
 
         res = strict_json(system_prompt = system_msg,
@@ -448,12 +451,12 @@ Provide only plain text without Markdown formatting.
 Do not provide markdown formatting such as ```.
 '''.format(shell = self.shell, os=self.os_name)
 
-        res = strict_json(system_prompt = sgpt_prompt,
-                            user_prompt = aider_agent_response,
-                            output_format = {'command': 'Shell command to execute, type: str'},
-                            llm = self.llm)
+        res = self.llm(
+            system_prompt = sgpt_prompt,
+            user_prompt = aider_agent_response
+        )
 
-        return res['command']
+        return res
 
     async def run_subtask(self, subtask: str) -> AsyncGenerator[str, None]:
         """
