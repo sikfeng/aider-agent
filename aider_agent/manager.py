@@ -36,6 +36,7 @@ import shutil
 
 app = FastAPI()
 
+# TODO: better way of managing ports of aider instances
 START_PORT = -1
 
 class AiderAgent():
@@ -61,17 +62,19 @@ class AiderAgent():
 
         global START_PORT
         while True:
-            process = subprocess.Popen(f"init_aider_process --port {START_PORT} --model-name {model_name}", cwd=repo_dir, shell=True)
-            self.logger.info(f"Attempt to start an aider process on port {START_PORT} with model {model_name}")
+            process = subprocess.Popen(f"init_aider_instance --port {START_PORT} --model-name {model_name}", cwd=repo_dir, shell=True)
+            self.logger.info(f"Attempt to start an aider instance on port {START_PORT} with model {model_name}")
             self.port = START_PORT
             START_PORT += 1
             try:
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 if process.returncode is None:
-                    self.logger.info(f"aider process on port {START_PORT} still running, assuming successful")
+                    self.logger.info(f"aider instance on port {START_PORT} still running, assuming successful")
+                    # TODO: send a ping to check if the agent is alive
+                    # TODO: perform this asynchronously rather than waiting
                     break
-                self.logger.info(f"aider process on port {START_PORT} terminated, continue trying...")
+                self.logger.info(f"aider instance on port {START_PORT} terminated, continue trying...")
             # process terminated
             self.logger.info(f"Agent on port {START_PORT} terminated, continue trying...")
 
