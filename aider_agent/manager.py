@@ -8,6 +8,10 @@ Decide whether to use http or websockets
 Better error handling
 '''
 
+from aider.coders import Coder
+from aider.models import Model
+from aider.io import InputOutput
+
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 
@@ -39,15 +43,14 @@ app = FastAPI()
 # TODO: better way of managing ports of aider instances
 START_PORT = -1
 
-class AiderAgent():
+class ExternalRepoAgent():
     """
-    A class to manage the Aider agent.
+    A class to manage an Aider instance initialized on another repository.
     """
     repo_dir: str = "."  # Directory of the repository
     port: int = -1  # Port number for the agent
     logger: logging.Logger  # Logger instance for the agent
     _process: subprocess.Popen | None = None  # Subprocess for the agent
-    user_access: bool = False  # Flag to indicate user access
 
     def __init__(self, model_name: str = "azure/gpt-4o", repo_dir: str = ".") -> None:
         """
@@ -160,6 +163,92 @@ class AiderAgent():
         return response.json()["result"]
 
 
+class MainAiderAgent():
+    """
+    A class to manage the Aider agent.
+    """
+    coder = None
+
+    def __init__(self, model_name: str = "azure/gpt-4o", repo_dir: str = ".") -> None:
+        """
+        Initialize the AiderAgent.
+
+        :param model_name: The name of the model to use.
+        :param repo_dir: The directory of the repository.
+        """
+
+        self.llm_name = "azure/gpt-4o"
+        self.model = Model(model_name)
+
+        self.io = InputOutput(
+            pretty=False,
+            yes=True,
+        )
+        self.coder = Coder.create(
+            main_model=self.model,
+            io=self.io,
+        )
+        return
+
+
+    def run(self, msg: str) -> str:
+        """
+        Run the agent with the given message.
+
+        :param msg: The message to process.
+        :return: The result of processing the message.
+        """
+        try:
+            self.coder = Coder.create(
+                from_coder=self.coder,
+                edit_format=None,
+                summarize_from_coder=False,
+                io=self.io,
+            )
+            result = self.coder.run(msg)
+            return str(result)
+        except:
+            return "error: failed"
+
+    def run_stream(self, msg: str):
+        """
+        Run the agent with the given message and stream the response.
+
+        :param msg: The message to process.
+        :return: An async generator yielding parts of the response.
+        """
+        self.coder = Coder.create(
+            from_coder=self.coder,
+            edit_format=None,
+            summarize_from_coder=False,
+            io=self.io,
+        )
+        for partial_response in self.coder.run_stream(msg):
+            yield partial_response
+        #return self.coder.run_stream(msg)
+
+    def ask(self, msg: str):
+        """
+        Ask a question to the Aider agent.
+
+        :param msg: The question to ask.
+        :return: The response from the agent.
+        """
+        return self.run_stream('/ask', msg)
+
+    def run_cmd(self, cmd: str) -> str:
+        """
+        Run a command using the Aider agent.
+
+        :param cmd: The command to run.
+        :return: The response from the agent.
+        """
+        return self.run('/run', cmd)
+
+    def get_repo_map(self) -> str:
+        return self.coder.get_repo_map()
+
+
 class PlannerAgent():
     """
     A class to manage the Planner agent.
@@ -259,7 +348,7 @@ class Manager():
         """
         self.planner_agent = None
         self.main_aider_agent = None
-        self.aider_agents = dict()
+        self.external_repo_agents = dict()
         self.logger = logging.getLogger("manager")
         self.task = None
 
@@ -287,21 +376,21 @@ class Manager():
 
         return
 
-    def init_aider_agent(self, repo_dir: str = ".") -> str:
+    def init_external_repo_agent(self, repo_dir: str = ".") -> str:
         """
         Initialize an Aider agent.
 
         :param repo_dir: The directory of the repository.
         :return: "success" if the agent is initialized, otherwise an error message.
         """
-        if repo_dir in self.aider_agents:
+        if repo_dir in self.external_repo_agents:
             return "error: agent already initialized on this repo dir"
         
         # TODO: convert path to a standardized repr, such as abs path
         
-        agent = AiderAgent(model_name="azure/gpt-4o", repo_dir=repo_dir)
+        agent = ExternalRepoAgent(model_name="azure/gpt-4o", repo_dir=repo_dir)
 
-        self.aider_agents[repo_dir] = agent
+        self.external_repo_agents[repo_dir] = agent
         return "success"
     
     def init_main_aider_agent(self) -> str:
@@ -310,7 +399,7 @@ class Manager():
 
         :return: "success" if the agent is initialized.
         """
-        agent = AiderAgent(model_name="azure/gpt-4o", repo_dir=".")
+        agent = MainAiderAgent(model_name="azure/gpt-4o")
 
         self.main_aider_agent = agent
         return "success"
@@ -325,9 +414,10 @@ class Manager():
         self.planner_agent = PlannerAgent(model_name)
         return "success"
 
+    # TODO: move over to ExternalRepoAgent
     async def find_relevant_code(self, task):
         results = dict()
-        for repo_path, repo_agent in self.aider_agents.items():
+        for repo_path, repo_agent in self.external_repo_agents.items():
             prompt = """
 Please look through the repository structure and suggest a list of files that is relevant to the following task.
 
@@ -469,10 +559,13 @@ Do not provide markdown formatting such as ```.
         :return: An async generator yielding parts of the response.
         """
 
-        async for partial_response in self.find_relevant_code(subtask):
-             yield partial_response
+        # TODO: need to check if subtask actually needs to be implemented, or if it is already done
+        # possibly need an agent that is capable of running aider commands (e.g. add files)
 
-        for repo_path in self.aider_agents:
+        async for partial_response in self.find_relevant_code(subtask):
+            yield partial_response
+
+        for repo_path in self.external_repo_agents:
             code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
             try:
                 #shutil.move(f"{repo_path}/{code_snippet_filename}", f"{code_snippet_filename}")
@@ -506,7 +599,7 @@ If you wish to edit a file, add the file to the chat.
 """
         response = ""
 
-        async for partial_response in self.main_aider_agent.run_stream(message):
+        for partial_response in self.main_aider_agent.run_stream(message):
             response += partial_response
             yield partial_response
 
@@ -563,20 +656,20 @@ If you wish to edit a file, add the file to the chat.
 
         :return: A string representation of the agents.
         """
-        return str(self.aider_agents)
+        return str(self.external_repo_agents)
 
 manager = Manager()
 
 # create agent
-@app.post("/init_aider_agent")
-async def init_aider_agent(repo_dir="."):
+@app.post("/init_external_repo_agent")
+async def init_external_repo_agent(repo_dir="."):
     """
     API endpoint to initialize an Aider agent.
 
     :param repo_dir: The directory of the repository.
     :return: The result of the initialization.
     """
-    result = manager.init_aider_agent(repo_dir)
+    result = manager.init_external_repo_agent(repo_dir)
     return result
 
 # get agents
