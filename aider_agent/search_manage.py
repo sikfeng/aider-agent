@@ -1,8 +1,8 @@
 from collections import defaultdict, namedtuple
 from collections.abc import MutableMapping
 
-from app.search import search_utils
-from app.search.search_utils import SearchResult
+import search_utils
+from search_utils import SearchResult
 
 LineRange = namedtuple("LineRange", ["start", "end"])
 
@@ -58,6 +58,7 @@ class SearchManager:
         self.function_index.update(function_index)
         self.parsed_files.extend(parsed_files)
 
+    # TODO: rename this method since it handles more than python now
     def _build_python_index(
         self,
     ) -> tuple[ClassIndexType, ClassFuncIndexType, FuncIndexType, list[str]]:
@@ -65,11 +66,12 @@ class SearchManager:
         class_func_index: ClassFuncIndexType = defaultdict(lambda: defaultdict(list))
         function_index: FuncIndexType = defaultdict(list)
 
-        py_files = search_utils.find_python_files(self.project_path)
+        # TODO: should allow for other languages too
+        py_files = search_utils.find_python_files(self.project_path) + search_utils.find_javascript_files(self.project_path) + search_utils.find_typescript_files(self.project_path)
         # holds the parsable subset of all py files
         parsed_py_files = []
         for py_file in py_files:
-            file_info = search_utils.parse_python_file(py_file)
+            file_info = search_utils.parse_file(py_file)
             if file_info is None:
                 # parsing of this file failed
                 continue
@@ -89,7 +91,6 @@ class SearchManager:
             # (3) build (top-level) function index
             for f, start, end in top_level_funcs:
                 function_index[f].append((py_file, LineRange(start, end)))
-
         return class_index, class_func_index, function_index, parsed_py_files
 
     def file_line_to_class_and_func(
@@ -216,7 +217,7 @@ class SearchManager:
             tool_result += f"- Search result {idx + 1}:\n```\n{res_str}\n```"
         return tool_result, summary, True
 
-    def search_class(self, class_name: str) -> tuple[str, str, bool]:
+    '''def search_class(self, class_name: str) -> tuple[str, str, bool]:
         # initialize them to error case
         summary = f"Class {class_name} did not appear in the codebase."
         tool_result = f"Could not find class {class_name} in the codebase."
@@ -248,7 +249,7 @@ class SearchManager:
                 res_str = res.to_tagged_str(self.project_path)
                 tool_result += f"- Search result {idx + 1}:\n```\n{res_str}\n```\n"
         summary = f"The tool returned information about class `{class_name}`."
-        return tool_result, summary, True
+        return tool_result, summary, True'''
 
     def search_class_in_file(self, class_name, file_name: str) -> tuple[str, str, bool]:
         # (1) check whether we can get the file
@@ -478,4 +479,3 @@ class SearchManager:
         self, file_path: str, start_line: int, end_line: int
     ) -> str:
         return search_utils.get_code_snippets(file_path, start_line, end_line)
-
