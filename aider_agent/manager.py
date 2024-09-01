@@ -150,6 +150,7 @@ class ExternalRepoAgent():
 
         :return: "alive" if the process is running, otherwise "dead".
         """
+        # TODO: can use the ping method first instead
         poll = self._process.poll()
         if poll == None:
             return "alive"
@@ -162,6 +163,45 @@ class ExternalRepoAgent():
         )
         return response.json()["result"]
 
+    async def find_relevant_code(self, task):
+        prompt = """
+Please look through the repository structure and suggest a list of files that is relevant to the following task.
+
+{task}
+
+Please only provide the full path and return at most 5 files.
+The returned files should be separated by new lines ordered by most to least important and wrapped with ```
+For example:
+```
+file1.py
+file2.py
+```
+"""
+        async for partial_response in self.ask(prompt.format(task=task)):
+            #print(partial_response, end='')
+            yield partial_response
+        yield '\n'
+
+        prompt = """
+Please look through the added files and suggest code snippets that are most relevant and can be reused for the following task. 
+
+{task}
+"""
+        async for partial_response in self.ask(prompt.format(task=task)):
+            #print(partial_response, end='')
+            yield partial_response
+        yield '\n'
+
+        prompt = """For the useful code snippets you had found, add comments to show which file they originated from, and a description of what it does."""
+        response = ""
+        async for partial_response in self.run_stream(prompt):
+            response += partial_response
+            yield partial_response
+        yield '\n'
+        
+        code_snippet_filename = f"code_snippets_{self.repo_dir.replace('/', '').replace('.','')}.txt"
+        with open(code_snippet_filename, 'w') as code_snippet_file:
+            code_snippet_file.write(response)
 
 class MainAiderAgent():
     """
@@ -296,12 +336,6 @@ class PlannerAgent():
         :param objective: The main objective.
         :return: A list of subtasks.
         """
-        """
-        Generate a list of subtasks to achieve the given objective.
-
-        :param objective: The main objective.
-        :return: A list of subtasks.
-        """
         system_msg = """You're a diligent software engineer AI.
 
 Create a plan consisting of multiple tasks to complete the provided objective.
@@ -386,7 +420,7 @@ class Manager():
         if repo_dir in self.external_repo_agents:
             return "error: agent already initialized on this repo dir"
         
-        # TODO: convert path to a standardized repr, such as abs path
+        # TODO: convert path to a standardized repr, probably w.r.t. /workspace/
         
         agent = ExternalRepoAgent(model_name="azure/gpt-4o", repo_dir=repo_dir)
 
@@ -413,79 +447,6 @@ class Manager():
         """
         self.planner_agent = PlannerAgent(model_name)
         return "success"
-
-    # TODO: move over to ExternalRepoAgent
-    async def find_relevant_code(self, task):
-        results = dict()
-        for repo_path, repo_agent in self.external_repo_agents.items():
-            prompt = """
-Please look through the repository structure and suggest a list of files that is relevant to the following task.
-
-{task}
-
-Please only provide the full path and return at most 5 files.
-The returned files should be separated by new lines ordered by most to least important and wrapped with ```
-For example:
-```
-file1.py
-file2.py
-```
-"""
-            async for partial_response in repo_agent.ask(prompt.format(task=task)):
-                #print(partial_response, end='')
-                yield partial_response
-            yield '\n'
-
-            prompt = """
-Please look through the added files and suggest code snippets that are most relevant and can be reused for the following task. 
-
-{task}
-"""
-            async for partial_response in repo_agent.ask(prompt.format(task=task)):
-                #print(partial_response, end='')
-                yield partial_response
-            yield '\n'
-
-            prompt = """For the useful code snippets you had found, add comments to show which file they originated from, and a description of what it does."""
-            code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
-            response = ""
-            async for partial_response in repo_agent.run_stream(prompt.format(code_snippet_filename=code_snippet_filename)):
-                response += partial_response
-                yield partial_response
-            yield '\n'
-            
-            code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
-            with open(code_snippet_filename, 'w') as code_snippet_file:
-                code_snippet_file.write(response)
-
-            '''prompt = """Please write these code snippets into a new file `{code_snippet_filename}`."""
-            code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
-            async for partial_response in repo_agent.run_stream(prompt.format(code_snippet_filename=code_snippet_filename)):
-                #print(partial_response, end='')
-                yield partial_response
-            yield '\n'
-
-            retry_limit = 0
-            while not os.path.isfile(code_snippet_filename) and retry_limit > 0:
-                retry_limit -= 1
-                print(f"error creating {code_snippet_filename}")
-
-                # retry
-                async for partial_response in repo_agent.run_stream(f"""You did not write the code snippets to the file {code_snippet_filename}. 
-Remember, ALL changes to files must use this *SEARCH/REPLACE block* format.
-
-Please look through the added files and suggest code snippets that are relevant to the following task.
-
-{task}
-
-Write these code snippets into a new file `{code_snippet_filename}`. 
-Include comments with their original file names and a description of what the function does."""):
-                    #print(partial_response, end='')
-                    yield partial_response
-                yield '\n'
-                '''
-                
-        return
 
     def generate_subtasks(self, objective: str) -> list[str]:
         """
@@ -562,8 +523,9 @@ Do not provide markdown formatting such as ```.
         # TODO: need to check if subtask actually needs to be implemented, or if it is already done
         # possibly need an agent that is capable of running aider commands (e.g. add files)
 
-        async for partial_response in self.find_relevant_code(subtask):
-            yield partial_response
+        for repo_dir, external_repo_agent in self.external_repo_agents.items():
+            async for partial_response in external_repo_agent.find_relevant_code(subtask):
+                yield partial_response
 
         for repo_path in self.external_repo_agents:
             code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
