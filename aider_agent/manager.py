@@ -25,6 +25,7 @@ import logging
 import asyncio
 
 import os
+import signal
 import platform
 from distro import name as distro_name
 
@@ -749,6 +750,11 @@ If you wish to edit a file, add the file to the chat.
         :return: A string representation of the agents.
         """
         return str(self.external_repo_agents)
+    
+    def shutdown(self):
+        for external_repo_agent in self.external_repo_agents:
+            external_repo_agent.kill()
+        return "shutdown"
 
 manager = Manager()
 
@@ -827,6 +833,11 @@ async def confirm_run_subtasks(subtasks: list[str]) -> list[str]:
     """
     return StreamingResponse(manager.confirm_run_subtasks(subtasks))
 
+@app.get("/shutdown")
+def shutdown():
+    manager.shutdown()
+    os.kill(os.getpid(), signal.SIGTERM)
+    return "shutdown"
 
 def main() -> None:
     """
