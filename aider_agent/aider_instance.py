@@ -21,14 +21,15 @@ class Agent:
     """
     A class to manage the Aider agent.
     """
-    def __init__(self, llm_name: str = "azure/gpt-4o") -> None:
+    def __init__(self, llm_name: str = "azure/gpt-4o", map_tokens = 8092) -> None:
         """
         Initialize the Agent.
 
         :param llm_name: The name of the model to use.
         """
-        self.llm_name = "azure/gpt-4o"
+        self.llm_name = llm_name
         self.model = Model(llm_name)
+        self.map_tokens = map_tokens
 
         self.io = InputOutput(
             pretty=False,
@@ -37,7 +38,10 @@ class Agent:
         self.coder = Coder.create(
             main_model=self.model,
             io=self.io,
+            map_tokens=map_tokens,
+            suggest_shell_commands=False,
         )
+        self.repo_map = self.coder.get_repo_map()
         return
 
     def run_stream(self, msg: str) -> AsyncGenerator[str, None]:
@@ -47,15 +51,7 @@ class Agent:
         :param msg: The message to process.
         :return: An async generator yielding parts of the response.
         """
-        self.coder = Coder.create(
-            from_coder=self.coder,
-            edit_format=None,
-            summarize_from_coder=False,
-            io=self.io,
-        )
-        #async for partial_response in self.coder.run_stream(msg):
-        #    yield partial_response
-        return self.coder.run_stream(msg)
+        return self.coder.run_stream("/code " + msg)
 
     def run(self, msg: str) -> str:
         """
@@ -65,13 +61,7 @@ class Agent:
         :return: The result of processing the message.
         """
         try:
-            self.coder = Coder.create(
-                from_coder=self.coder,
-                edit_format=None,
-                summarize_from_coder=False,
-                io=self.io,
-            )
-            result = self.coder.run(msg)
+            result = self.coder.run("/code ", msg)
             return str(result)
         except:
             return "error: failed"
@@ -83,19 +73,12 @@ class Agent:
         :param msg: The question to ask.
         :return: The result of the question.
         """
-        self.coder = Coder.create(
-            from_coder=self.coder,
-            edit_format="ask",
-            summarize_from_coder=False,
-            io=self.io,
-        )
-        return self.coder.run_stream(msg)
+        return self.coder.run_stream("/ask " + msg)
     
     def get_repo_map(self) -> str:
-        result = self.coder.get_repo_map()
-        return result
+        return self.repo_map
 
-agent = Agent()
+agent = None
 
 # send a message to aider
 @app.post("/msg")
@@ -122,7 +105,7 @@ async def run_stream(msg: str) -> StreamingResponse:
 
 # ask aider
 @app.post("/ask")
-async def ask(msg: str) -> str:
+async def ask(msg: str) -> StreamingResponse:
     """
     API endpoint to ask a question to the agent.
 
@@ -136,7 +119,7 @@ def get_repo_map() -> str:
     result = agent.get_repo_map()
     return result
 
-@app.post("/ping")
+@app.get("/ping")
 def ping() -> str:
     """
     API endpoint to ping the agent.
@@ -150,10 +133,14 @@ def main() -> None:
     """
     Main function to run the agent application.
     """
-    parser = argparse.ArgumentParser(description="Run the Aider agent application.")
-    parser.add_argument('--port', type=int, help='Port of the agent', default=8080)
+    parser = argparse.ArgumentParser(description="Start an aider instance.")
+    parser.add_argument('--port', type=int, help='Port for http requests', default=8080)
     parser.add_argument('--model-name', type=str, help='Name of the model to use', default="azure/gpt-4o")
+    parser.add_argument('--map-tokens', type=int, help='Maximum number of tokens for repo map', default=8092)
     args = parser.parse_args()
+
+    global agent
+    agent = Agent(llm_name=args.model_name, map_tokens=args.map_tokens)
 
     import uvicorn  # Import here to avoid unnecessary dependency if not running as main
     uvicorn.run(app, host="0.0.0.0", port=args.port)

@@ -6,6 +6,7 @@ External repo agents can be run simultaneously
 Prompt tuning
 Decide whether to use http or websockets
 Better error handling
+Shutdown uvicorn gracefully
 '''
 
 from aider.coders import Coder
@@ -21,6 +22,8 @@ import subprocess
 import requests
 import logging
 
+import asyncio
+
 import os
 import platform
 from distro import name as distro_name
@@ -29,19 +32,31 @@ import litellm
 from litellm import completion
 
 litellm.suppress_debug_info = True
-litellm.set_verbose = False
+litellm.set_verbose = True
 litellm.drop_params = True
 
 from strictjson import *
 
 from typing import AsyncGenerator
-
-import shutil
+from pathlib import Path
 
 app = FastAPI()
 
 # TODO: better way of managing ports of aider instances
 START_PORT = -1
+
+# TODO: make a util.py to store util functions instead
+def get_absolute_path(path):
+    # Create a Path object
+    path_obj = Path(path)
+
+    # Check if the path is already absolute
+    if path_obj.is_absolute():
+        return path_obj
+
+    # Convert to absolute path
+    absolute_path = path_obj.resolve()
+    return absolute_path
 
 class ExternalRepoAgent():
     """
@@ -52,7 +67,7 @@ class ExternalRepoAgent():
     logger: logging.Logger  # Logger instance for the agent
     _process: subprocess.Popen | None = None  # Subprocess for the agent
 
-    def __init__(self, model_name: str = "azure/gpt-4o", repo_dir: str = ".") -> None:
+    def __init__(self, repo_dir: str, model_name: str = "azure/gpt-4o") -> None:
         """
         Initialize the AiderAgent.
 
@@ -60,19 +75,21 @@ class ExternalRepoAgent():
         :param repo_dir: The directory of the repository.
         """
 
-        self.logger = logging.getLogger(f"agent {repo_dir}")
-        self.repo_dir = repo_dir
+        # Standardize to use absolute path
+        self.repo_dir = get_absolute_path(repo_dir)
+        self.logger = logging.getLogger(f"agent {self.repo_dir}")
+        self.model_name = model_name
 
         global START_PORT
         while True:
-            process = subprocess.Popen(f"init_aider_instance --port {START_PORT} --model-name {model_name}", cwd=repo_dir, shell=True)
+            self._process = subprocess.Popen(f"exec init_aider_instance --port {START_PORT} --model-name {model_name}", cwd=self.repo_dir, shell=True)
             self.logger.info(f"Attempt to start an aider instance on port {START_PORT} with model {model_name}")
             self.port = START_PORT
             START_PORT += 1
             try:
-                process.wait(timeout=5)
+                self._process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                if process.returncode is None:
+                if self._process.returncode is None:
                     self.logger.info(f"aider instance on port {START_PORT} still running, assuming successful")
                     # TODO: send a ping to check if the agent is alive
                     # TODO: perform this asynchronously rather than waiting
@@ -161,47 +178,176 @@ class ExternalRepoAgent():
         response = requests.get(
             f"http://0.0.0.0:{self.port}/get_repo_map"
         )
-        return response.json()["result"]
+        return response.json()
+
+
+    def llm(self, system_prompt: str, user_prompt: str) -> str:
+        """
+        Generate a response using the LLM without using Aider.
+
+        :param system_prompt: The system prompt.
+        :param user_prompt: The user prompt.
+        :return: The response from the LLM.
+        """
+        
+        # define your own LLM here
+        # TODO: allow different model
+        response = completion(
+            model=self.model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+        )
+        return response.choices[0].message.content
+    
 
     async def find_relevant_code(self, task):
-        prompt = """
+        # Step 1: Get list of relevant files
+        system_msg = """
+You are a software developer maintaining a project.
+You are providing code snippets to a user who is working on a different project. 
+The user will integrate the code snippets into their project to achieve a task.
+
+Here are summaries of some files present in your project.
+
+{repo_map}
+        """
+        repo_map = self.get_repo_map()
+        system_msg = system_msg.format(repo_map=repo_map)
+
+        user_msg = """
 Please look through the repository structure and suggest a list of files that is relevant to the following task.
 
 {task}
 
 Please only provide the full path and return at most 5 files.
-The returned files should be separated by new lines ordered by most to least important and wrapped with ```
-For example:
-```
-file1.py
-file2.py
-```
 """
-        async for partial_response in self.ask(prompt.format(task=task)):
-            #print(partial_response, end='')
-            yield partial_response
-        yield '\n'
 
-        prompt = """
-Please look through the added files and suggest code snippets that are most relevant and can be reused for the following task. 
+        user_msg = user_msg.format(task=task)
+
+        res = strict_json(
+            system_prompt = system_msg,
+            user_prompt = user_msg,
+            output_format = {
+                'filenames': "Array of filenames which contain relevant for completing the user's task, type: Array[str]"
+            },
+            llm = self.llm
+        )
+
+        # Ensure that the filenames were not hallucinated
+        filenames = [filename for filename in res["filenames"] if (self.repo_dir / filename).is_file()]
+        if len(filenames) == 0:
+            # No real file names were generated, we should end early
+            return
+
+        # Step 2: Get the relevant definitions
+        system_msg = """
+You are a software developer maintaining a project.
+You are providing code snippets to a user who is working on a different project. 
+The user will integrate the code snippets into their project to achieve a task.
+
+Here are summaries of some files present in your project.
+
+{repo_map}
+"""
+        system_msg = system_msg.format(repo_map=repo_map)
+
+        user_msg = """
+Here are the files which the contain relevant code snippets.
+
+{filenames}
+
+For each of the above files, look through the repository structure to suggest the relevant class or functions that can be used for the following task.
 
 {task}
 """
-        async for partial_response in self.ask(prompt.format(task=task)):
-            #print(partial_response, end='')
-            yield partial_response
-        yield '\n'
 
-        prompt = """For the useful code snippets you had found, add comments to show which file they originated from, and a description of what it does."""
-        response = ""
-        async for partial_response in self.run_stream(prompt):
-            response += partial_response
-            yield partial_response
-        yield '\n'
+        task = "Create a new command in the package.json file that will trigger the webview."
+        user_msg = user_msg.format(task=task, filenames=", ".join(f"`{filename}`" for filename in filenames))
+
+        res = strict_json(
+            system_prompt = system_msg,
+            user_prompt = user_msg,
+            output_format = {
+                filename: f"Array of relevant class and method names in {filename}, type: Array[str]" for filename in filenames
+            },
+            llm = self.llm
+        )
+
+        useful_defs = {filename: res[filename] for filename in res if len(res[filename]) > 0}
+        if len(useful_defs) == 0:
+            # No useful defs found, we can stop early
+            return
         
-        code_snippet_filename = f"code_snippets_{self.repo_dir.replace('/', '').replace('.','')}.txt"
+        # TODO: allow running model queries async
+        # Step 3: Get the code snippets that were requested, and do one more round of checking if they are actually relevant
+        useful_codes = dict()
+        for filename in useful_defs:
+            system_msg = """
+You are a software developer maintaining a project.
+You are providing code snippets to a user who is working on a different project. 
+The user will integrate the code snippets into their project to achieve a task.
+
+Here are the contents of {filename}:
+
+```
+{file_contents}
+```
+"""
+            with open(self.repo_dir / filename) as f:
+                file_contents = f.read()
+                system_msg = system_msg.format(filename=filename, file_contents=file_contents)
+
+            user_msg = """
+For the following class, method and function names, extract their code from the file contents.
+Also, determine if the code snippet will be useful, and if so explanation of why they are useful for the task.
+
+Class/Method/Function names:
+{definitions}
+
+Task:
+{task}
+"""
+
+            task = "Create a new command in the package.json file that will trigger the webview."
+            user_msg = user_msg.format(definitions=", ".join(f"`{def_name}`" for def_name in useful_defs[filename]), task=task)
+
+            res = strict_json(
+                system_prompt = system_msg,
+                user_prompt = user_msg,
+                output_format = {
+                    def_name : {
+                        "code": f"code for `{def_name}`, type: code",
+                        "useful": f"whether `{def_name}` is useful, type: bool",
+                        "description": f"explanation of why `{def_name}` is useful for the task, type: str"
+                    } for def_name in useful_defs[filename]
+                },
+                llm = self.llm
+            )
+
+            res = {def_name: res[def_name] for def_name in res if res[def_name]["useful"]}
+            if len(res) > 0:
+                useful_codes[filename] = res
+
+        response = ""
+        for filename in useful_codes:
+            for def_name in useful_codes[filename]:
+                response += f"### {filename}\n{useful_codes[filename][def_name]['description']}\n\n"
+                response += "```\n"
+                response += useful_codes[filename][def_name]["code"]
+                response += "\n```\n\n"
+        response = response.strip()
+
+        code_snippet_filename = f"code_snippets_{str(self.repo_dir).replace('/', '').replace('.','')}.txt"
         with open(code_snippet_filename, 'w') as code_snippet_file:
             code_snippet_file.write(response)
+
+        return
+
+    def kill(self):
+        self._process.kill()
+        return
 
 class MainAiderAgent():
     """
@@ -217,8 +363,8 @@ class MainAiderAgent():
         :param repo_dir: The directory of the repository.
         """
 
-        self.llm_name = "azure/gpt-4o"
-        self.model = Model(model_name)
+        self.model_name = model_name
+        self.model = Model(self.model_name)
 
         self.io = InputOutput(
             pretty=False,
@@ -227,6 +373,7 @@ class MainAiderAgent():
         self.coder = Coder.create(
             main_model=self.model,
             io=self.io,
+            suggest_shell_commands=False
         )
         return
 
@@ -239,13 +386,7 @@ class MainAiderAgent():
         :return: The result of processing the message.
         """
         try:
-            self.coder = Coder.create(
-                from_coder=self.coder,
-                edit_format=None,
-                summarize_from_coder=False,
-                io=self.io,
-            )
-            result = self.coder.run(msg)
+            result = self.coder.run("/code " + msg)
             return str(result)
         except:
             return "error: failed"
@@ -257,13 +398,7 @@ class MainAiderAgent():
         :param msg: The message to process.
         :return: An async generator yielding parts of the response.
         """
-        self.coder = Coder.create(
-            from_coder=self.coder,
-            edit_format=None,
-            summarize_from_coder=False,
-            io=self.io,
-        )
-        for partial_response in self.coder.run_stream(msg):
+        for partial_response in self.coder.run_stream("/code " + msg):
             yield partial_response
         #return self.coder.run_stream(msg)
 
@@ -274,7 +409,7 @@ class MainAiderAgent():
         :param msg: The question to ask.
         :return: The response from the agent.
         """
-        return self.run_stream('/ask', msg)
+        return self.run_stream("/ask " + msg)
 
     def run_cmd(self, cmd: str) -> str:
         """
@@ -283,7 +418,7 @@ class MainAiderAgent():
         :param cmd: The command to run.
         :return: The response from the agent.
         """
-        return self.run('/run', cmd)
+        return self.run("/run", cmd)
 
     def get_repo_map(self) -> str:
         return self.coder.get_repo_map()
@@ -311,17 +446,10 @@ class PlannerAgent():
         :param user_prompt: The user prompt.
         :return: The response from the LLM.
         """
-        """
-        Generate a response using the LLM.
-
-        :param system_prompt: The system prompt.
-        :param user_prompt: The user prompt.
-        :return: The response from the LLM.
-        """
         
         # define your own LLM here
         response = completion(
-            model='azure/gpt4o',
+            model=self.model_name,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -347,10 +475,12 @@ Do npt implement functionality that the user did not ask for.
 Building, testing and deployment are not required, so do not plan these tasks.
 """
 
-        res = strict_json(system_prompt = system_msg,
-                            user_prompt = objective,
-                            output_format = {'Plan': 'Array of subtasks, type: Array[str]'},
-                            llm = self.llm)
+        res = strict_json(
+            system_prompt = system_msg,
+            user_prompt = objective,
+            output_format = {'Plan': 'Array of subtasks, type: Array[str]'},
+            llm = self.llm
+        )
         
         return res['Plan']
     
@@ -410,30 +540,29 @@ class Manager():
 
         return
 
-    def init_external_repo_agent(self, repo_dir: str = ".") -> str:
+    def init_external_repo_agent(self, repo_dir: str, model_name="azure/gpt-4o") -> str:
         """
         Initialize an Aider agent.
 
         :param repo_dir: The directory of the repository.
         :return: "success" if the agent is initialized, otherwise an error message.
         """
+        repo_dir = str(get_absolute_path(repo_dir))
         if repo_dir in self.external_repo_agents:
             return "error: agent already initialized on this repo dir"
         
-        # TODO: convert path to a standardized repr, probably w.r.t. /workspace/
-        
-        agent = ExternalRepoAgent(model_name="azure/gpt-4o", repo_dir=repo_dir)
+        agent = ExternalRepoAgent(model_name=model_name, repo_dir=repo_dir)
 
         self.external_repo_agents[repo_dir] = agent
         return "success"
     
-    def init_main_aider_agent(self) -> str:
+    def init_main_aider_agent(self, model_name="azure/gpt-4o") -> str:
         """
         Initialize the main Aider agent.
 
         :return: "success" if the agent is initialized.
         """
-        agent = MainAiderAgent(model_name="azure/gpt-4o")
+        agent = MainAiderAgent(model_name=model_name)
 
         self.main_aider_agent = agent
         return "success"
@@ -489,10 +618,12 @@ class Manager():
         :return: The shell command if found, otherwise None.
         """
         
-        res = strict_json(system_prompt = "Your job is to find out if there are instructions to run any shell commands",
-                            user_prompt = aider_agent_response,
-                            output_format = {'execute': 'Whether there are shell commands to execute, type: bool'},
-                            llm = self.llm)
+        res = strict_json(
+            system_prompt = "Your job is to find out if there are instructions to run any shell commands",
+            user_prompt = aider_agent_response,
+            output_format = {'execute': 'Whether there are shell commands to execute, type: bool'},
+            llm = self.llm
+        )
         
         if not res['execute']:
             return None
@@ -523,12 +654,11 @@ Do not provide markdown formatting such as ```.
         # TODO: need to check if subtask actually needs to be implemented, or if it is already done
         # possibly need an agent that is capable of running aider commands (e.g. add files)
 
-        for repo_dir, external_repo_agent in self.external_repo_agents.items():
-            async for partial_response in external_repo_agent.find_relevant_code(subtask):
-                yield partial_response
+        await asyncio.gather(*(external_repo_agent.find_relevant_code(subtask) for external_repo_agent in self.external_repo_agents.values()))
 
         for repo_path in self.external_repo_agents:
             code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
+            print(code_snippet_filename)
             try:
                 #shutil.move(f"{repo_path}/{code_snippet_filename}", f"{code_snippet_filename}")
                 self.main_aider_agent.run(f"/read-only {code_snippet_filename}")
@@ -624,7 +754,7 @@ manager = Manager()
 
 # create agent
 @app.post("/init_external_repo_agent")
-async def init_external_repo_agent(repo_dir="."):
+async def init_external_repo_agent(repo_dir):
     """
     API endpoint to initialize an Aider agent.
 
