@@ -560,6 +560,8 @@ file3.json
         return gathered_info
 
     # TODO: I tried getting it to incorporate codebase context when planning, but its not working well
+    # if the user asks to implement a whole feature, it may still plan some subtasks that are already completed
+    # and with more prompts its getting slower
     async def generate_subtasks(self, objective: str) -> list[str]:
         """
         Generate a list of subtasks to achieve the given objective.
