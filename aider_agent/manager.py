@@ -41,23 +41,12 @@ from strictjson import *
 from typing import AsyncGenerator
 from pathlib import Path
 
+from . import utils
+
 app = FastAPI()
 
 # TODO: better way of managing ports of aider instances
 START_PORT = -1
-
-# TODO: make a util.py to store util functions instead
-def get_absolute_path(path):
-    # Create a Path object
-    path_obj = Path(path)
-
-    # Check if the path is already absolute
-    if path_obj.is_absolute():
-        return path_obj
-
-    # Convert to absolute path
-    absolute_path = path_obj.resolve()
-    return absolute_path
 
 class ExternalRepoAgent():
     """
@@ -77,7 +66,7 @@ class ExternalRepoAgent():
         """
 
         # Standardize to use absolute path
-        self.repo_dir = get_absolute_path(repo_dir)
+        self.repo_dir = utils.get_absolute_path(repo_dir)
         self.logger = logging.getLogger(f"agent {self.repo_dir}")
         self.model_name = model_name
 
@@ -181,28 +170,6 @@ class ExternalRepoAgent():
         )
         return response.json()
 
-    # TODO: move to utils.py
-    def llm(self, system_prompt: str, user_prompt: str) -> str:
-        """
-        Generate a response using the LLM without using Aider.
-
-        :param system_prompt: The system prompt.
-        :param user_prompt: The user prompt.
-        :return: The response from the LLM.
-        """
-        
-        # define your own LLM here
-        # TODO: allow different model
-        response = completion(
-            model=self.model_name,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
-        )
-        return response.choices[0].message.content
-    
-
     async def find_relevant_code(self, task):
         # Step 1: Get list of relevant files
         system_msg = """
@@ -233,7 +200,7 @@ Please only provide the full path and return at most 5 files.
             output_format = {
                 'filenames': "Array of filenames which contain relevant for completing the user's task, type: Array[str]"
             },
-            llm = self.llm
+            llm = utils.llm(self.model_name)
         )
 
         # Ensure that the filenames were not hallucinated
@@ -273,7 +240,7 @@ For each of the above files, look through the repository structure to suggest th
             output_format = {
                 filename: f"Array of relevant class and method names in {filename}, type: Array[str]" for filename in filenames
             },
-            llm = self.llm
+            llm = utils.llm(self.model_name)
         )
 
         useful_defs = {filename: res[filename] for filename in res if len(res[filename]) > 0}
@@ -324,7 +291,7 @@ Task:
                         "description": f"explanation of why `{def_name}` is useful for the task, type: str"
                     } for def_name in useful_defs[filename]
                 },
-                llm = self.llm
+                llm = utils.llm(self.model_name)
             )
 
             res = {def_name: res[def_name] for def_name in res if res[def_name]["useful"]}
@@ -453,46 +420,6 @@ class PlannerAgent():
         )
         return
 
-    # TODO: move to utils
-    def llm(self, system_prompt: str, user_prompt: str) -> str:
-        """
-        Generate a response using the LLM.
-
-        :param system_prompt: The system prompt.
-        :param user_prompt: The user prompt.
-        :return: The response from the LLM.
-        """
-        
-        # define your own LLM here
-        response = completion(
-            model=self.model_name,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
-        )
-        return response.choices[0].message.content
-    
-    # TODO: move to utils
-    async def llm_async(self, system_prompt: str, user_prompt: str) -> str:
-        """
-        Generate a response using the LLM.
-
-        :param system_prompt: The system prompt.
-        :param user_prompt: The user prompt.
-        :return: The response from the LLM.
-        """
-        
-        # define your own LLM here
-        response = await acompletion(
-            model=self.model_name,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
-        )
-        return response
-
     async def gather_information(self, objective: str) -> dict:
         """
         Gather necessary information to generate a plan for the given objective.
@@ -520,7 +447,7 @@ Each question should be clear and specific to the task and codebase you are work
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             output_format={'questions': 'Array of questions, type: Array[str]'},
-            llm=self.llm
+            llm=utils.llm(self.model_name)
         )
 
         questions = questions_response['questions']
@@ -608,7 +535,7 @@ Building, testing and deployment are not required, so do not plan these tasks.
             system_prompt = system_msg,
             user_prompt = objective,
             output_format = {'Plan': 'Array of subtasks, type: Array[str]'},
-            llm = self.llm
+            llm = utils.llm(self.model_name)
         )
         
         return res['Plan']
@@ -676,7 +603,7 @@ class Manager():
         :param repo_dir: The directory of the repository.
         :return: "success" if the agent is initialized, otherwise an error message.
         """
-        repo_dir = str(get_absolute_path(repo_dir))
+        repo_dir = str(utils.get_absolute_path(repo_dir))
         if repo_dir in self.external_repo_agents:
             return "error: agent already initialized on this repo dir"
         
@@ -750,7 +677,7 @@ class Manager():
             system_prompt = "Your job is to find out if there are instructions to run any shell commands",
             user_prompt = aider_agent_response,
             output_format = {'execute': 'Whether there are shell commands to execute, type: bool'},
-            llm = self.llm
+            llm = utils.llm(self.model_name)
         )
         
         if not res['execute']:
@@ -764,7 +691,7 @@ Provide only plain text without Markdown formatting.
 Do not provide markdown formatting such as ```.
 '''.format(shell = self.shell, os=self.os_name)
 
-        res = self.llm(
+        res = utils.llm(self.model_name)(
             system_prompt = sgpt_prompt,
             user_prompt = aider_agent_response
         )
