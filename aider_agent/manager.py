@@ -30,7 +30,7 @@ import platform
 from distro import name as distro_name
 
 import litellm
-from litellm import completion
+from litellm import acompletion, completion
 
 litellm.suppress_debug_info = True
 litellm.set_verbose = True
@@ -181,7 +181,7 @@ class ExternalRepoAgent():
         )
         return response.json()
 
-
+    # TODO: move to utils.py
     def llm(self, system_prompt: str, user_prompt: str) -> str:
         """
         Generate a response using the LLM without using Aider.
@@ -429,7 +429,7 @@ class PlannerAgent():
     """
     A class to manage the Planner agent.
     """
-    def __init__(self, model_name: str = "azure/gpt-4o") -> None:
+    def __init__(self, model_name: str = "azure/gpt-4o", map_tokens=8092) -> None:
         """
         Initialize the PlannerAgent.
 
@@ -437,8 +437,23 @@ class PlannerAgent():
         """
         self.model_name = model_name
         self.logger = logging.getLogger("planner")
+        self.map_tokens = map_tokens
+
+        self.model = Model(self.model_name)
+        self.io = InputOutput(
+            pretty=False,
+            yes=True,
+        )
+        self.coder = Coder.create(
+            main_model=self.model,
+            io=self.io,
+            suggest_shell_commands=False,
+            edit_format="ask",
+            map_tokens=self.map_tokens,
+        )
         return
 
+    # TODO: move to utils
     def llm(self, system_prompt: str, user_prompt: str) -> str:
         """
         Generate a response using the LLM.
@@ -457,8 +472,95 @@ class PlannerAgent():
             ]
         )
         return response.choices[0].message.content
+    
+    # TODO: move to utils
+    async def llm_async(self, system_prompt: str, user_prompt: str) -> str:
+        """
+        Generate a response using the LLM.
 
-    def generate_subtasks(self, objective: str) -> list[str]:
+        :param system_prompt: The system prompt.
+        :param user_prompt: The user prompt.
+        :return: The response from the LLM.
+        """
+        
+        # define your own LLM here
+        response = await acompletion(
+            model=self.model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+        )
+        return response
+
+    async def gather_information(self, objective: str) -> dict:
+        """
+        Gather necessary information to generate a plan for the given objective.
+
+        :param objective: The main objective.
+        :return: A dictionary containing the gathered information.
+        """
+        # Ask the LLM what questions to ask using strictjson
+        system_prompt = """
+You are a software engineer gathering information to complete a task. However, you suspect that some functionality has already been implemented, which you can reuse.
+
+There is another software developer which understands the codebase which you will work on.
+
+You will ask questions to find out how you can reuse existing functionality to complete your task.
+You should consider the subtasks which you will have to implement, and ask the developer questions relating to those subtasks.
+"""
+        user_prompt = """
+What information do you need to know to complete the following task? Give at most 10 questions.
+Each question should be clear and specific to the task and codebase you are working on.
+
+{objective}
+"""
+        user_prompt = user_prompt.format(objective=objective)
+        questions_response = strict_json(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            output_format={'questions': 'Array of questions, type: Array[str]'},
+            llm=self.llm
+        )
+
+        questions = questions_response['questions']
+
+        async def ask_aider(question: str) -> str:
+            coder = Coder.create(
+                main_model=self.model,
+                io=self.io,
+                suggest_shell_commands=False,
+                edit_format="ask",
+                map_tokens=self.map_tokens,
+            )
+            coder.run("""What files do you need to answer the following question?
+{question}
+
+Return the files in the format as such.
+```
+file1.py
+file2.js
+file3.json
+```
+""".format(question=question))
+            coder.done_messages = []
+            coder.cur_messages = []
+            response = coder.run(question + "\n\nDo NOT write any code for implementing any features. Only respond in natural language.\nOnly respond with information about the current codebase.")
+            return question, response
+
+        gathered_info = {}
+        #tasks = [ask_question(question) for question in questions]
+        tasks = [ask_aider(question) for question in questions]
+        responses = await asyncio.gather(*tasks)
+
+        for question, response in responses:
+            gathered_info[question] = response
+
+        print(gathered_info)
+        return gathered_info
+
+    # TODO: I tried getting it to incorporate codebase context when planning, but its not working well
+    async def generate_subtasks(self, objective: str) -> list[str]:
         """
         Generate a list of subtasks to achieve the given objective.
 
@@ -469,12 +571,36 @@ class PlannerAgent():
 
 Create a plan consisting of multiple tasks to complete the provided objective.
 
-Each task should be a discrete, actionable step that contributes to the overall objective. Do not waste time on uneccessary or redundant steps.
+Each task should be a discrete, actionable step that contributes to the overall objective.
+Do not waste time on uneccessary or redundant steps.
 Don't create needless tasks like "document the findings".
 
-Do npt implement functionality that the user did not ask for.
+These tasks will be given to a new intern developer, hence ensure each task has a clear description.
+
+Here are some questions and answers regarding this codebase.
+{gathered_info}
+
+Do not implement functionality that the user did not ask for, or is already implemented.
 Building, testing and deployment are not required, so do not plan these tasks.
 """
+
+
+        # Gather necessary information
+        gathered_info = await self.gather_information(objective)
+
+        # Format gathered_info in markdown
+        formatted_gathered_info = ""
+        
+        for question, answer in gathered_info.items():
+            formatted_gathered_info += """**Question:** 
+{question}
+
+**Answer:**
+{answer}
+""".format(question=question, answer=answer)
+
+        system_msg = system_msg.format(gathered_info=formatted_gathered_info)
+        print(system_msg)
 
         res = strict_json(
             system_prompt = system_msg,
@@ -578,16 +704,15 @@ class Manager():
         self.planner_agent = PlannerAgent(model_name)
         return "success"
 
-    def generate_subtasks(self, objective: str) -> list[str]:
+    async def generate_subtasks(self, objective: str) -> list[str]:
         """
         Generate a list of subtasks to achieve the given objective.
 
         :param objective: The main objective.
         :return: A list of subtasks.
         """
-        self.task = self.planner_agent.generate_subtasks(objective)
-        subtasks = self.task
-        return subtasks
+        self.task = await self.planner_agent.generate_subtasks(objective)
+        return self.task
         
     def finetune_subtasks(self, objective: str, instruction: str) -> list[str]:
         return "TODO"
@@ -752,7 +877,7 @@ If you wish to edit a file, add the file to the chat.
         return str(self.external_repo_agents)
     
     def shutdown(self):
-        for external_repo_agent in self.external_repo_agents:
+        for external_repo_agent in self.external_repo_agents.values():
             external_repo_agent.kill()
         return "shutdown"
 
@@ -789,7 +914,7 @@ async def generate_subtasks(objective) -> list[str]:
     :param objective: The main objective.
     :return: The list of generated subtasks.
     """
-    return manager.generate_subtasks(objective)
+    return await manager.generate_subtasks(objective)
 
 # finetune subtasks
 @app.post("/finetune_subtasks")
