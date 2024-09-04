@@ -15,12 +15,10 @@ def get_absolute_path(path):
     path_obj = Path(path)
 
     # Check if the path is already absolute
-    if path_obj.is_absolute():
-        return path_obj
+    if not path_obj.is_absolute():
+        path_obj = path_obj.resolve()
 
-    # Convert to absolute path
-    absolute_path = path_obj.resolve()
-    return absolute_path
+    return str(path_obj)
 
 def llm(model_name:str):
     return partial(_llm, model_name=model_name)

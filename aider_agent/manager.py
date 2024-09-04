@@ -204,7 +204,7 @@ Please only provide the full path and return at most 5 files.
         )
 
         # Ensure that the filenames were not hallucinated
-        filenames = [filename for filename in res["filenames"] if (self.repo_dir / filename).is_file()]
+        filenames = [filename for filename in res["filenames"] if (Path(self.repo_dir) / filename).is_file()]
         if len(filenames) == 0:
             # No real file names were generated, we should end early
             return
@@ -263,7 +263,7 @@ Here are the contents of {filename}:
 {file_contents}
 ```
 """
-            with open(self.repo_dir / filename) as f:
+            with open(Path(self.repo_dir) / filename) as f:
                 file_contents = f.read()
                 system_msg = system_msg.format(filename=filename, file_contents=file_contents)
 
@@ -307,7 +307,7 @@ Task:
                 response += "\n```\n\n"
         response = response.strip()
 
-        code_snippet_filename = f"code_snippets_{str(self.repo_dir).replace('/', '').replace('.','')}.txt"
+        code_snippet_filename = f"code_snippets_{self.repo_dir.replace('/', '').replace('.','')}.txt"
         with open(code_snippet_filename, 'w') as code_snippet_file:
             code_snippet_file.write(response)
 
@@ -562,7 +562,7 @@ class Manager():
     """
     A class to manage the overall process and agents.
     """
-    def __init__(self) -> None:
+    def __init__(self, model_name:str = "azure/gpt-4o") -> None:
         """
         Initialize the Manager.
         """
@@ -570,7 +570,7 @@ class Manager():
         self.main_aider_agent = None
         self.external_repo_agents = dict()
         self.logger = logging.getLogger("manager")
-        self.task = None
+        self.model_name = model_name
 
         def _os_name() -> str:
             current_platform = platform.system()
@@ -603,7 +603,7 @@ class Manager():
         :param repo_dir: The directory of the repository.
         :return: "success" if the agent is initialized, otherwise an error message.
         """
-        repo_dir = str(utils.get_absolute_path(repo_dir))
+        repo_dir = utils.get_absolute_path(repo_dir)
         if repo_dir in self.external_repo_agents:
             return "error: agent already initialized on this repo dir"
         
@@ -640,30 +640,10 @@ class Manager():
         :param objective: The main objective.
         :return: A list of subtasks.
         """
-        self.task = await self.planner_agent.generate_subtasks(objective)
-        return self.task
+        return await self.planner_agent.generate_subtasks(objective)
         
     def finetune_subtasks(self, objective: str, instruction: str) -> list[str]:
         return "TODO"
-
-    def llm(self, system_prompt: str, user_prompt: str) -> str:
-        """
-        Generate a response using the LLM.
-
-        :param system_prompt: The system prompt.
-        :param user_prompt: The user prompt.
-        :return: The response from the LLM.
-        """
-        
-        # define your own LLM here
-        response = completion(
-            model='azure/gpt4o',
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
-        )
-        return response.choices[0].message.content
 
     def check_for_shell_cmds_in_response(self, aider_agent_response: str) -> str | None:
         """
@@ -824,6 +804,7 @@ async def init_external_repo_agent(repo_dir):
     result = manager.init_external_repo_agent(repo_dir)
     return result
 
+# TODO: rename to ext repo only
 # get agents
 @app.get("/get_agents")
 async def get_agents():
