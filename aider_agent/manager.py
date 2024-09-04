@@ -41,6 +41,8 @@ from strictjson import *
 from typing import AsyncGenerator
 from pathlib import Path
 
+import json
+
 from . import utils
 
 app = FastAPI()
@@ -777,13 +779,13 @@ If you wish to edit a file, add the file to the chat.
         
         #return responses
 
-    def get_agents(self) -> str:
+    def get_external_repo_agents(self) -> str:
         """
         Get a list of all initialized Aider agents.
 
         :return: A string representation of the agents.
         """
-        return str(self.external_repo_agents)
+        return json.dumps(list(self.external_repo_agents.keys()))
     
     def shutdown(self):
         for external_repo_agent in self.external_repo_agents.values():
@@ -806,14 +808,14 @@ async def init_external_repo_agent(repo_dir):
 
 # TODO: rename to ext repo only
 # get agents
-@app.get("/get_agents")
-async def get_agents():
+@app.get("/get_external_repo_agents")
+async def get_external_repo_agents():
     """
     API endpoint to get a list of all initialized Aider agents.
 
     :return: The result containing the list of agents.
     """
-    return str(manager.get_agents())
+    return str(manager.get_external_repo_agents())
 
 # generate subtasks
 @app.post("/generate_subtasks")
