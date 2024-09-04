@@ -1,7 +1,7 @@
 FROM python:3.10-slim AS base
 
 RUN apt-get update && \
-    apt-get install --no-install-recommends -y build-essential git libportaudio2 gnupg2 && \
+    apt-get install --no-install-recommends -y build-essential git libportaudio2 gnupg2 curl unzip && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
@@ -19,15 +19,25 @@ RUN chmod a+rwx /.aider /.cache
 #RUN git config --system --add safe.directory /workspace
 RUN git config --system --add safe.directory "*"
 
+#RUN git clone https://github.com/nus-apr/auto-code-rover.git
+#RUN mv auto-code-rover /opt/
+#RUN /venv/bin/python -m pip install --no-cache-dir -r /opt/auto-code-rover/requirements.txt
+#ENV PATH="$PATH:/opt/auto-code-rover/"
+
+ARG AIDER_VERSION=0.54.12
+
+FROM base AS aider
+
+RUN /venv/bin/python -m pip install --upgrade --no-cache-dir pip
+RUN /venv/bin/python -m pip install --no-cache-dir aider-chat==${AIDER_VERSION}
+
 FROM base AS aider-full
 
 RUN /venv/bin/python -m pip install --upgrade --no-cache-dir pip
-#RUN /venv/bin/python -m pip install --no-cache-dir aider-chat[help,browser,playwright]==0.51.1 --extra-index-url https://download.pytorch.org/whl/cpu
-RUN /venv/bin/python -m pip install --no-cache-dir aider-chat==0.51.1
+RUN /venv/bin/python -m pip install --no-cache-dir aider-chat[help,browser,playwright]==${AIDER_VERSION} --extra-index-url https://download.pytorch.org/whl/cpu
+RUN playwright install --with-deps chromium
 
-#RUN playwright install --with-deps chromium
-
-FROM aider-full AS aider-agent
+FROM aider AS aider-agent
 
 #COPY . /tmp/aider-agent
 #RUN /venv/bin/python -m pip install --no-cache-dir /tmp/aider-agent
