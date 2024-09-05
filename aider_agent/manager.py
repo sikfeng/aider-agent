@@ -1,12 +1,8 @@
 '''
 TODO
 ------
-Planning agent doesnt take into account the current state of the repo, so it might generate tasks that are already completed
-External repo agents can be run simultaneously
-Prompt tuning
 Decide whether to use http or websockets
 Better error handling
-Shutdown uvicorn gracefully
 '''
 
 from aider.coders import Coder
