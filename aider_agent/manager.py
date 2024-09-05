@@ -33,7 +33,7 @@ import litellm
 from litellm import acompletion, completion
 
 litellm.suppress_debug_info = True
-litellm.set_verbose = True
+litellm.set_verbose = False
 litellm.drop_params = True
 
 from strictjson import *
@@ -59,18 +59,20 @@ class ExternalRepoAgent():
     logger: logging.Logger  # Logger instance for the agent
     _process: subprocess.Popen | None = None  # Subprocess for the agent
 
-    def __init__(self, repo_dir: str, model_name: str = "azure/gpt-4o") -> None:
+    def __init__(self, repo_dir: str, model_name: str = "azure/gpt-4o", max_concurrent_llm_queries: int = 3) -> None:
         """
         Initialize the AiderAgent.
 
         :param model_name: The name of the model to use.
         :param repo_dir: The directory of the repository.
+        :param max_concurrent_llm_queries: The maximum number of concurrent LLM queries.
         """
 
         # Standardize to use absolute path
         self.repo_dir = utils.get_absolute_path(repo_dir)
         self.logger = logging.getLogger(f"agent {self.repo_dir}")
         self.model_name = model_name
+        self.max_concurrent_llm_queries = max_concurrent_llm_queries
 
         global START_PORT
         while True:
@@ -250,11 +252,13 @@ For each of the above files, look through the repository structure to suggest th
             # No useful defs found, we can stop early
             return
         
-        # TODO: allow running model queries async
         # Step 3: Get the code snippets that were requested, and do one more round of checking if they are actually relevant
-        useful_codes = dict()
-        for filename in useful_defs:
-            system_msg = """
+        # Create a semaphore with a limit of 3
+        semaphore = asyncio.Semaphore(self.max_concurrent_llm_queries)
+
+        async def process_file(filename, semaphore):
+            async with semaphore:
+                system_msg = """
 You are a software developer maintaining a project.
 You are providing code snippets to a user who is working on a different project. 
 The user will integrate the code snippets into their project to achieve a task.
@@ -265,11 +269,11 @@ Here are the contents of {filename}:
 {file_contents}
 ```
 """
-            with open(Path(self.repo_dir) / filename) as f:
-                file_contents = f.read()
-                system_msg = system_msg.format(filename=filename, file_contents=file_contents)
+                with open(Path(self.repo_dir) / filename) as f:
+                    file_contents = f.read()
+                    system_msg = system_msg.format(filename=filename, file_contents=file_contents)
 
-            user_msg = """
+                user_msg = """
 For the following class, method and function names, extract their code from the file contents.
 Also, determine if the code snippet will be useful, and if so explanation of why they are useful for the task.
 
@@ -280,25 +284,26 @@ Task:
 {task}
 """
 
-            task = "Create a new command in the package.json file that will trigger the webview."
-            user_msg = user_msg.format(definitions=", ".join(f"`{def_name}`" for def_name in useful_defs[filename]), task=task)
+                user_msg = user_msg.format(definitions=", ".join(f"`{def_name}`" for def_name in useful_defs[filename]), task=task)
 
-            res = strict_json(
-                system_prompt = system_msg,
-                user_prompt = user_msg,
-                output_format = {
-                    def_name : {
-                        "code": f"code for `{def_name}`, type: code",
-                        "useful": f"whether `{def_name}` is useful, type: bool",
-                        "description": f"explanation of why `{def_name}` is useful for the task, type: str"
-                    } for def_name in useful_defs[filename]
-                },
-                llm = utils.llm(self.model_name)
-            )
+                res = await strict_json_async(
+                    system_prompt=system_msg,
+                    user_prompt=user_msg,
+                    output_format={
+                        def_name: {
+                            "code": f"code for `{def_name}`, type: code",
+                            "useful": f"whether `{def_name}` is useful, type: bool",
+                            "description": f"explanation of why `{def_name}` is useful for the task, type: str"
+                        } for def_name in useful_defs[filename]
+                    },
+                    llm=utils.llm_async(self.model_name)
+                )
+                return {def_name: res[def_name] for def_name in res if res[def_name]["useful"]}
 
-            res = {def_name: res[def_name] for def_name in res if res[def_name]["useful"]}
-            if len(res) > 0:
-                useful_codes[filename] = res
+        tasks = [process_file(filename, semaphore) for filename in useful_defs]
+        results = await asyncio.gather(*tasks)
+
+        useful_codes = {filename: result for filename, result in zip(useful_defs, results) if len(result) > 0}
 
         response = ""
         for filename in useful_codes:
@@ -398,7 +403,7 @@ class PlannerAgent():
     """
     A class to manage the Planner agent.
     """
-    def __init__(self, model_name: str = "azure/gpt-4o", map_tokens=8092) -> None:
+    def __init__(self, model_name: str = "azure/gpt-4o", map_tokens=8092, max_concurrent_llm_queries=2) -> None:
         """
         Initialize the PlannerAgent.
 
@@ -407,19 +412,7 @@ class PlannerAgent():
         self.model_name = model_name
         self.logger = logging.getLogger("planner")
         self.map_tokens = map_tokens
-
-        self.model = Model(self.model_name)
-        self.io = InputOutput(
-            pretty=False,
-            yes=True,
-        )
-        self.coder = Coder.create(
-            main_model=self.model,
-            io=self.io,
-            suggest_shell_commands=False,
-            edit_format="ask",
-            map_tokens=self.map_tokens,
-        )
+        self.max_concurrent_llm_queries = max_concurrent_llm_queries
         return
 
     async def gather_information(self, objective: str) -> dict:
@@ -454,15 +447,22 @@ Each question should be clear and specific to the task and codebase you are work
 
         questions = questions_response['questions']
 
-        async def ask_aider(question: str) -> str:
-            coder = Coder.create(
-                main_model=self.model,
-                io=self.io,
-                suggest_shell_commands=False,
-                edit_format="ask",
-                map_tokens=self.map_tokens,
-            )
-            coder.run("""What files do you need to answer the following question?
+        def ask_aider(question: str) -> str:
+            model = Model(self.model_name)
+            with open(os.devnull, "w") as output:
+                io = InputOutput(
+                    pretty=False,
+                    yes=True,
+                    output=output
+                )
+                coder = Coder.create(
+                    main_model=model,
+                    io=io,
+                    suggest_shell_commands=False,
+                    edit_format="ask",
+                    map_tokens=self.map_tokens,
+                )
+                coder.run("""What files do you need to answer the following question?
 {question}
 
 Return the files in the format as such.
@@ -472,20 +472,31 @@ file2.js
 file3.json
 ```
 """.format(question=question))
-            coder.done_messages = []
-            coder.cur_messages = []
-            response = coder.run(question + "\n\nDo NOT write any code for implementing any features. Only respond in natural language.\nOnly respond with information about the current codebase.")
-            return question, response
+                coder.done_messages = []
+                coder.cur_messages = []
+                response = coder.run("""{question}
+
+Do NOT write any code for implementing any features. 
+Only respond in natural language.
+Only respond with information about the current codebase.
+Respond with a high level overview of what has already been implemented, and what is missing.
+""")
+                return question, response
+
+        async def limited_ask_aider(semaphore, question):
+            async with semaphore:
+                return await asyncio.to_thread(ask_aider, question)
+
+        semaphore = asyncio.Semaphore(self.max_concurrent_llm_queries)
 
         gathered_info = {}
-        #tasks = [ask_question(question) for question in questions]
-        tasks = [ask_aider(question) for question in questions]
+        tasks = [limited_ask_aider(semaphore, question) for question in questions]
         responses = await asyncio.gather(*tasks)
 
         for question, response in responses:
             gathered_info[question] = response
 
-        print(gathered_info)
+        #print(gathered_info)
         return gathered_info
 
     # TODO: I tried getting it to incorporate codebase context when planning, but its not working well
@@ -498,6 +509,15 @@ file3.json
         :param objective: The main objective.
         :return: A list of subtasks.
         """
+        # Restate the problem statement
+        system_msg = """You are a requirements analyst.
+Restate the following as an instruction for a software developer
+"""
+        user_msg = objective
+        objective = utils.llm(self.model_name)(
+            system_prompt=system_msg, user_prompt=user_msg
+        )
+
         system_msg = """You're a diligent software engineer AI.
 
 Create a plan consisting of multiple tasks to complete the provided objective.
@@ -687,9 +707,6 @@ Do not provide markdown formatting such as ```.
         :param subtask: The subtask to run.
         :return: An async generator yielding parts of the response.
         """
-
-        # TODO: need to check if subtask actually needs to be implemented, or if it is already done
-        # possibly need an agent that is capable of running aider commands (e.g. add files)
 
         await asyncio.gather(*(external_repo_agent.find_relevant_code(subtask) for external_repo_agent in self.external_repo_agents.values()))
 

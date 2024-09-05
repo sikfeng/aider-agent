@@ -23,6 +23,9 @@ def get_absolute_path(path):
 def llm(model_name:str):
     return partial(_llm, model_name=model_name)
 
+def llm_async(model_name:str):
+    return partial(_llm_async, model_name=model_name)
+
 def _llm(model_name:str, system_prompt: str, user_prompt: str) -> str:
     """
     Generate a response using the LLM.
@@ -42,7 +45,7 @@ def _llm(model_name:str, system_prompt: str, user_prompt: str) -> str:
     )
     return response.choices[0].message.content
 
-async def llm_async(model_name: str, system_prompt: str, user_prompt: str) -> str:
+async def _llm_async(model_name: str, system_prompt: str, user_prompt: str) -> str:
     """
     Generate a response using the LLM.
 
@@ -59,4 +62,4 @@ async def llm_async(model_name: str, system_prompt: str, user_prompt: str) -> st
             {"role": "user", "content": user_prompt}
         ]
     )
-    return response
+    return response.choices[0].message.content
