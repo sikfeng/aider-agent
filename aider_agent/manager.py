@@ -393,7 +393,7 @@ class MainAiderAgent():
         :param cmd: The command to run.
         :return: The response from the agent.
         """
-        return self.run("/run", cmd)
+        return self.run("/run " + cmd)
 
     def get_repo_map(self) -> str:
         return self.coder.get_repo_map()
@@ -667,39 +667,6 @@ class Manager():
     def finetune_subtasks(self, objective: str, instruction: str) -> list[str]:
         return "TODO"
 
-    def check_for_shell_cmds_in_response(self, aider_agent_response: str) -> str | None:
-        """
-        Check if there are shell commands in the Aider agent response.
-
-        :param aider_agent_response: The response from the Aider agent.
-        :return: The shell command if found, otherwise None.
-        """
-        
-        res = strict_json(
-            system_prompt = "Your job is to find out if there are instructions to run any shell commands",
-            user_prompt = aider_agent_response,
-            output_format = {'execute': 'Whether there are shell commands to execute, type: bool'},
-            llm = utils.llm(self.model_name)
-        )
-        
-        if not res['execute']:
-            return None
-
-        sgpt_prompt = '''Provide only {shell} commands for {os} without any description.
-If there is a lack of details, provide most logical solution.
-Ensure the output is a valid shell command.
-If multiple steps required try to combine them together using &&.
-Provide only plain text without Markdown formatting.
-Do not provide markdown formatting such as ```.
-'''.format(shell = self.shell, os=self.os_name)
-
-        res = utils.llm(self.model_name)(
-            system_prompt = sgpt_prompt,
-            user_prompt = aider_agent_response
-        )
-
-        return res
-
     async def run_subtask(self, subtask: str) -> AsyncGenerator[str, None]:
         """
         Run a subtask using the main Aider agent.
@@ -714,7 +681,6 @@ Do not provide markdown formatting such as ```.
             code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
             print(code_snippet_filename)
             try:
-                #shutil.move(f"{repo_path}/{code_snippet_filename}", f"{code_snippet_filename}")
                 self.main_aider_agent.run(f"/read-only {code_snippet_filename}")
             except:
                 print(f"error: {code_snippet_filename} not found, skipping")
@@ -745,24 +711,84 @@ If you wish to edit a file, add the file to the chat.
 """
         response = ""
 
-        for partial_response in self.main_aider_agent.run_stream(message):
-            response += partial_response
-            yield partial_response
+        for _ in range(1):
+            curr_response = ""
+            for partial_response in self.main_aider_agent.run_stream(message):
+                curr_response += partial_response
+                yield partial_response
+
+            response += curr_response
+
+            # Check for shell commands and files to add in the response
+            def check_for_shell_cmds_in_response(aider_agent_response: str) -> str | None:
+                """
+                Check if there are shell commands in the Aider agent response.
+
+                :param aider_agent_response: The response from the Aider agent.
+                :return: The shell command if found, otherwise None.
+                """
+                
+                res = strict_json(
+                    system_prompt = "Your job is to find out if there are specific instructions to run any shell commands",
+                    user_prompt = aider_agent_response,
+                    output_format = {'execute': 'Whether there are shell commands to execute, type: bool'},
+                    llm = utils.llm(self.model_name)
+                )
+                
+                if not res['execute']:
+                    return None
+
+                sgpt_prompt = '''Provide only {shell} commands for {os} without any description.
+If there is a lack of details, provide most logical solution.
+If the command is an interactive command or does not terminate, do not provide it.
+You should not be running shell commands that directly writes to files.
+Ensure the output is a valid shell command.
+If multiple steps required try to combine them together using &&.
+Provide only plain text without Markdown formatting.
+Do not provide markdown formatting such as ```.
+                '''.format(shell = self.shell, os=self.os_name)
+
+                res = utils.llm(self.model_name)(
+                    system_prompt = sgpt_prompt,
+                    user_prompt = aider_agent_response
+                )
+
+                return res
+
+
+            # Check for shell commands and files to add in the response
+            shell_cmds = check_for_shell_cmds_in_response(curr_response)
+
+            if shell_cmds:
+                for command in shell_cmds.splitlines():
+                    yield f"\n<suggested_cmd>{command}</suggested_cmd>\n"
+                    # Optionally, you can execute the command here if needed
+                    cmd_response = self.main_aider_agent.run_cmd(command)
+                    yield f"<cmd_response>{cmd_response}</cmd_response>"
+
+                    # TODO: litellm query if successful or if need to run something else
+
+            # Pass the response to strict_json to determine if there are files to be added
+            res = strict_json(
+                system_prompt="Your job is to find out if there are files to be added.",
+                user_prompt=response,
+                output_format={
+                    'add_files': 'List of files to be added, type: list[str]'
+                },
+                llm=utils.llm(self.model_name)
+            )
+
+            for file in res['add_files']:
+                yield f"\n<add_file>{file}</add_file>\n"
+                # Optionally, you can add the file here if needed
+                self.main_aider_agent.run(f"/add {file}")
+
+            # Break the loop if there are no more commands to execute or files to add
+            if not shell_cmds and not res['add_files']:
+                break
 
         self.completed_subtasks.append(subtask)
 
-        #responses.append(response)
-
-        '''cmd = self.check_for_shell_cmds_in_response(response)
-        #print(cmd)
-        if cmd is not None:
-            #responses.append("<cmd>" + cmd)
-            yield "\n<suggested_cmd>"
-            #cmd_response = self.main_aider_agent.run_cmd(message)
-            #yield cmd_response
-            yield cmd
-            yield "</suggested_cmd>\n"'''
-            
         return
 
     def undo_last_subtask(self) -> str:
