@@ -42,6 +42,7 @@ from typing import AsyncGenerator
 from pathlib import Path
 
 import json
+import re
 
 from . import utils
 
@@ -584,7 +585,7 @@ class Manager():
     """
     A class to manage the overall process and agents.
     """
-    def __init__(self, model_name:str = "azure/gpt-4o") -> None:
+    def __init__(self, model_name:str = "azure/gpt-4o", max_reflections=5) -> None:
         """
         Initialize the Manager.
         """
@@ -593,6 +594,7 @@ class Manager():
         self.external_repo_agents = dict()
         self.logger = logging.getLogger("manager")
         self.model_name = model_name
+        self.max_reflections = max_reflections
 
         def _os_name() -> str:
             current_platform = platform.system()
@@ -710,8 +712,7 @@ If the files you wish to write to do not exist yet, automatically create them.
 If you wish to edit a file, add the file to the chat.
 """
         response = ""
-
-        for _ in range(1):
+        for _ in range(self.max_reflections):
             curr_response = ""
             for partial_response in self.main_aider_agent.run_stream(message):
                 curr_response += partial_response
@@ -727,65 +728,41 @@ If you wish to edit a file, add the file to the chat.
                 :param aider_agent_response: The response from the Aider agent.
                 :return: The shell command if found, otherwise None.
                 """
+                # List of shell code block markers
+                shell_markers = [
+                    "bash", "sh", "shell", "cmd", "batch", "powershell", "ps1",
+                    "zsh", "fish", "ksh", "csh", "tcsh"
+                ]
                 
-                res = strict_json(
-                    system_prompt = "Your job is to find out if there are specific instructions to run any shell commands",
-                    user_prompt = aider_agent_response,
-                    output_format = {'execute': 'Whether there are shell commands to execute, type: bool'},
-                    llm = utils.llm(self.model_name)
+                # Create a regex pattern to match any of the shell code block markers
+                shell_code_pattern = re.compile(
+                    r'```(?:' + '|'.join(shell_markers) + r')(.*?)```', re.DOTALL | re.IGNORECASE
                 )
                 
-                if not res['execute']:
+                # Find all matches
+                matches = shell_code_pattern.findall(aider_agent_response)
+                
+                if not matches:
                     return None
-
-                sgpt_prompt = '''Provide only {shell} commands for {os} without any description.
-If there is a lack of details, provide most logical solution.
-If the command is an interactive command or does not terminate, do not provide it.
-You should not be running shell commands that directly writes to files.
-Ensure the output is a valid shell command.
-If multiple steps required try to combine them together using &&.
-Provide only plain text without Markdown formatting.
-Do not provide markdown formatting such as ```.
-                '''.format(shell = self.shell, os=self.os_name)
-
-                res = utils.llm(self.model_name)(
-                    system_prompt = sgpt_prompt,
-                    user_prompt = aider_agent_response
-                )
-
-                return res
-
+                
+                return shell_cmds
 
             # Check for shell commands and files to add in the response
             shell_cmds = check_for_shell_cmds_in_response(curr_response)
 
-            if shell_cmds:
-                for command in shell_cmds.splitlines():
+            if shell_cmds is not None:
+                for command in shell_cmds:
                     yield f"\n<suggested_cmd>{command}</suggested_cmd>\n"
                     # Optionally, you can execute the command here if needed
-                    cmd_response = self.main_aider_agent.run_cmd(command)
-                    yield f"<cmd_response>{cmd_response}</cmd_response>"
+                    #cmd_response = self.main_aider_agent.run_cmd(command)
+                    #yield f"<cmd_response>{cmd_response}</cmd_response>"
 
-                    # TODO: litellm query if successful or if need to run something else
-
-            # Pass the response to strict_json to determine if there are files to be added
-            res = strict_json(
-                system_prompt="Your job is to find out if there are files to be added.",
-                user_prompt=response,
-                output_format={
-                    'add_files': 'List of files to be added, type: list[str]'
-                },
-                llm=utils.llm(self.model_name)
-            )
-
-            for file in res['add_files']:
-                yield f"\n<add_file>{file}</add_file>\n"
-                # Optionally, you can add the file here if needed
-                self.main_aider_agent.run(f"/add {file}")
-
-            # Break the loop if there are no more commands to execute or files to add
-            if not shell_cmds and not res['add_files']:
+            # Use the new function to find files to add
+            
+            if self.main_aider_agent.coder.reflected_message is None:
                 break
+            else:
+                message = self.main_aider_agent.coder.reflected_message
 
         self.completed_subtasks.append(subtask)
 
