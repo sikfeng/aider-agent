@@ -738,10 +738,10 @@ If you wish to edit a file, add the file to the chat.
                 shell_code_pattern = re.compile(
                     r'```(?:' + '|'.join(shell_markers) + r')(.*?)```', re.DOTALL | re.IGNORECASE
                 )
-                
+
                 # Find all matches
                 matches = shell_code_pattern.findall(aider_agent_response)
-                
+
                 if not matches:
                     return None
                 
@@ -758,7 +758,7 @@ If you wish to edit a file, add the file to the chat.
                     #yield f"<cmd_response>{cmd_response}</cmd_response>"
 
             # Use the new function to find files to add
-            
+
             if self.main_aider_agent.coder.reflected_message is None:
                 break
             else:
@@ -799,13 +799,13 @@ If you wish to edit a file, add the file to the chat.
         
         #return responses
 
-    def get_external_repo_agents(self) -> str:
+    def get_external_repo_agents(self) -> list[str]:
         """
         Get a list of all initialized Aider agents.
 
         :return: A string representation of the agents.
         """
-        return json.dumps(list(self.external_repo_agents.keys()))
+        return list(self.external_repo_agents.keys())
     
     def shutdown(self):
         for external_repo_agent in self.external_repo_agents.values():
@@ -826,10 +826,8 @@ async def init_external_repo_agent(repo_dir):
     result = manager.init_external_repo_agent(repo_dir)
     return result
 
-# TODO: rename to ext repo only
-# get agents
 @app.get("/get_external_repo_agents")
-async def get_external_repo_agents():
+async def get_external_repo_agents() -> list[str]:
     """
     API endpoint to get a list of all initialized Aider agents.
 
