@@ -833,7 +833,7 @@ async def get_external_repo_agents() -> list[str]:
 
     :return: The result containing the list of agents.
     """
-    return str(manager.get_external_repo_agents())
+    return manager.get_external_repo_agents()
 
 # generate subtasks
 @app.post("/generate_subtasks")
