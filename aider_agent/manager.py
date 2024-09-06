@@ -4,7 +4,7 @@ TODO
 Decide whether to use http or websockets
 Better error handling
 Implement subtask finetuning
-Set up litellm load balancing, retries, timeouts etc.
+Set up litellm load balancing, retries, timeouts etc. https://docs.litellm.ai/docs/proxy/reliability
 '''
 
 from aider.coders import Coder
@@ -17,7 +17,7 @@ from fastapi.responses import StreamingResponse
 import argparse
 
 import subprocess
-import requests
+import httpx
 import logging
 
 import asyncio
@@ -45,6 +45,9 @@ from . import utils
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
+
+class InitExternalRepoAgentError(RuntimeError):
+    pass
 
 class ExternalRepoAgent():
     """
@@ -78,6 +81,10 @@ class ExternalRepoAgent():
             sock.close()
             return port
 
+        # TODO: repomaps may take much longer to build if aider has never been initialized on the repo before
+        # Current implementation just kills the process and continues after reaching timeout
+        # One possible fix is to increase the timeout or remove it, but can I guarantee that it will always succeed if it doesnt terminate?
+
         for _ in range(max_init_retry):
             self.port = get_free_port()
             self.logger.info(f"Attempt to start an aider instance on port {self.port} with model {model_name}")
@@ -90,8 +97,9 @@ class ExternalRepoAgent():
                 if self._process.poll() is None:
                     self._process.kill()
                 self.logger.warning(f"aider instance on port {self.port} killed, continue trying...")
-            # process terminated
-            self.logger.info(f"aider instance on port {self.port} terminated, continue trying...")
+        else:
+            # Exhausted retries
+            raise InitExternalRepoAgentError(f"Failed to initialize ExternalRepoAgent on {self.repo_dir}")
 
     def wait_for_ping(self) -> bool:
         """
@@ -103,10 +111,10 @@ class ExternalRepoAgent():
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
-                response = requests.get(f"http://0.0.0.0:{self.port}/ping")
+                response = httpx.get(f"http://0.0.0.0:{self.port}/ping")
                 if response.json() == "pong":
                     return True
-            except requests.RequestException as e:
+            except httpx.RequestError as e:
                 self.logger.warn(f"Ping request failed: {e}")
             time.sleep(1)  # Wait for 0.5 seconds before retrying
         return False
@@ -118,7 +126,7 @@ class ExternalRepoAgent():
         :param msg: The message to send.
         :return: The response from the agent.
         """
-        response = requests.post(
+        response = httpx.post(
             f"http://0.0.0.0:{self.port}/msg",
             params={"msg": msg},
         )
@@ -132,7 +140,7 @@ class ExternalRepoAgent():
         :param chunk_size: The size of each chunk in the stream.
         :return: An async generator yielding parts of the response.
         """
-        response = requests.post(
+        response = httpx.post(
             f"http://0.0.0.0:{self.port}/run_stream",
             params={"msg": msg},
             stream = True
@@ -150,7 +158,7 @@ class ExternalRepoAgent():
         :param msg: The question to ask.
         :return: The response from the agent.
         """
-        response = requests.post(
+        response = httpx.post(
             f"http://0.0.0.0:{self.port}/ask",
             params={"msg": msg},
             stream = True
@@ -167,7 +175,7 @@ class ExternalRepoAgent():
         :param cmd: The command to run.
         :return: The response from the agent.
         """
-        response = requests.post(
+        response = httpx.post(
             f"http://0.0.0.0:{self.port}/msg",
             params={"msg": f"/run {cmd}"},
         )
@@ -183,7 +191,7 @@ class ExternalRepoAgent():
         if poll is not None:
             return "dead"
         
-        ping_response = requests.get(
+        ping_response = httpx.get(
             f"http://0.0.0.0:{self.port}/ping"
         )
         if ping_response == "pong":
@@ -192,7 +200,7 @@ class ExternalRepoAgent():
         return "dead"
         
     def get_repo_map(self) -> str:
-        response = requests.get(
+        response = httpx.get(
             f"http://0.0.0.0:{self.port}/get_repo_map"
         )
         return response.json()
@@ -656,11 +664,12 @@ class Manager():
         if repo_dir in self.external_repo_agents:
             return "error: agent already initialized on this repo dir"
         
-        # TODO: error handling
-        agent = ExternalRepoAgent(model_name=model_name, repo_dir=repo_dir)
-
-        self.external_repo_agents[repo_dir] = agent
-        return "success"
+        try:
+            agent = ExternalRepoAgent(model_name=model_name, repo_dir=repo_dir)
+            self.external_repo_agents[repo_dir] = agent
+            return "success"
+        except InitExternalRepoAgentError as e:
+            return str(e)
     
     def init_main_aider_agent(self, model_name="azure/gpt-4o") -> str:
         """
