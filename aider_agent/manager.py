@@ -3,6 +3,7 @@ TODO
 ------
 Decide whether to use http or websockets
 Better error handling
+Implement subtask finetuning
 Set up litellm load balancing, retries, timeouts etc.
 '''
 
@@ -639,6 +640,9 @@ class Manager():
 
         self.completed_subtasks = []
 
+        self.init_planner_agent()
+        self.init_main_aider_agent()
+
         return
 
     def init_external_repo_agent(self, repo_dir: str, model_name="azure/gpt-4o") -> str:
@@ -652,6 +656,7 @@ class Manager():
         if repo_dir in self.external_repo_agents:
             return "error: agent already initialized on this repo dir"
         
+        # TODO: error handling
         agent = ExternalRepoAgent(model_name=model_name, repo_dir=repo_dir)
 
         self.external_repo_agents[repo_dir] = agent
@@ -663,9 +668,7 @@ class Manager():
 
         :return: "success" if the agent is initialized.
         """
-        agent = MainAiderAgent(model_name=model_name)
-
-        self.main_aider_agent = agent
+        self.main_aider_agent = MainAiderAgent(model_name=model_name)
         return "success"
     
     def init_planner_agent(self, model_name: str = "azure/gpt-4o") -> str:
@@ -922,9 +925,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the Aider agent manager.")
     parser.add_argument('--port', type=int, help='Port of the agent', default=10000)
     args = parser.parse_args()
-
-    manager.init_planner_agent()
-    manager.init_main_aider_agent()
 
     import uvicorn  # Import Uvicorn for running the FastAPI app
     uvicorn.run(app, host="0.0.0.0", port=args.port)
