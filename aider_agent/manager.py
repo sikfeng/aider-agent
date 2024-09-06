@@ -72,6 +72,7 @@ class ExternalRepoAgent():
         self.logger = logging.getLogger(f"ExternalRepoAgent: `{self.repo_dir}`")
         self.model_name = model_name
         self.max_concurrent_llm_queries = max_concurrent_llm_queries
+        self.code_snippet_filename = utils.get_absolute_path(f"code_snippets_{self.repo_dir.replace('/', '').replace('.','')}.txt")
 
         def get_free_port():
             import socket
@@ -206,6 +207,8 @@ class ExternalRepoAgent():
         return response.json()
 
     async def find_relevant_code(self, task):
+        Path.unlink(Path(self.code_snippet_filename), missing_ok=True)
+
         # Step 1: Get list of relevant files
         system_msg = """
 You are a software developer maintaining a project.
@@ -339,14 +342,13 @@ Task:
         response = ""
         for filename in useful_codes:
             for def_name in useful_codes[filename]:
-                response += f"### {filename}\n{useful_codes[filename][def_name]['description']}\n\n"
+                response += f"{filename}\n{useful_codes[filename][def_name]['description']}\n\n"
                 response += "```\n"
                 response += useful_codes[filename][def_name]["code"]
                 response += "\n```\n\n"
         response = response.strip()
 
-        code_snippet_filename = f"code_snippets_{self.repo_dir.replace('/', '').replace('.','')}.txt"
-        with open(code_snippet_filename, 'w') as code_snippet_file:
+        with open(self.code_snippet_filename, 'w') as code_snippet_file:
             code_snippet_file.write(response)
 
         return
@@ -582,7 +584,7 @@ Building, testing and deployment are not required, so do not plan these tasks.
 """.format(question=question, answer=answer)
 
         system_msg = system_msg.format(gathered_info=formatted_gathered_info)
-        print(system_msg)
+        #print(system_msg)
 
         res = strict_json(
             system_prompt = system_msg,
@@ -622,7 +624,7 @@ class Manager():
         self.planner_agent = None
         self.main_aider_agent = None
         self.external_repo_agents = dict()
-        #self.logger = logging.getLogger("AgentManager")
+        self.logger = logging.getLogger("AgentManager")
         self.model_name = model_name
         self.max_reflections = max_reflections
 
@@ -661,6 +663,8 @@ class Manager():
         :return: "success" if the agent is initialized, otherwise an error message.
         """
         repo_dir = utils.get_absolute_path(repo_dir)
+        if repo_dir == utils.get_absolute_path("."):
+            return "error: cannot initialize agent on current directory"
         if repo_dir in self.external_repo_agents:
             return "error: agent already initialized on this repo dir"
         
@@ -714,11 +718,11 @@ class Manager():
 
         for repo_path in self.external_repo_agents:
             code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
-            print(code_snippet_filename)
+            self.logger.info(f"found {code_snippet_filename}")
             try:
                 self.main_aider_agent.run(f"/read-only {code_snippet_filename}")
             except:
-                print(f"error: {code_snippet_filename} not found, skipping")
+                self.logger.warning(f"{code_snippet_filename} not found, skipping")
 
         completed_tasks = ""
 
