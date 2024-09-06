@@ -3,6 +3,7 @@ TODO
 ------
 Decide whether to use http or websockets
 Better error handling
+Set up litellm load balancing, retries, timeouts etc.
 '''
 
 from aider.coders import Coder
@@ -19,14 +20,13 @@ import requests
 import logging
 
 import asyncio
-
+import time
 import os
 import signal
 import platform
 from distro import name as distro_name
 
 import litellm
-from litellm import acompletion, completion
 
 litellm.suppress_debug_info = True
 litellm.set_verbose = False
@@ -37,15 +37,13 @@ from strictjson import *
 from typing import AsyncGenerator
 from pathlib import Path
 
-import json
 import re
 
 from . import utils
 
-app = FastAPI()
+logging.basicConfig(level=logging.INFO)
 
-# TODO: better way of managing ports of aider instances
-START_PORT = -1
+app = FastAPI()
 
 class ExternalRepoAgent():
     """
@@ -56,7 +54,7 @@ class ExternalRepoAgent():
     logger: logging.Logger  # Logger instance for the agent
     _process: subprocess.Popen | None = None  # Subprocess for the agent
 
-    def __init__(self, repo_dir: str, model_name: str = "azure/gpt-4o", max_concurrent_llm_queries: int = 3) -> None:
+    def __init__(self, repo_dir: str, model_name: str = "azure/gpt-4o", max_concurrent_llm_queries: int = 3, max_init_retry=5) -> None:
         """
         Initialize the AiderAgent.
 
@@ -67,28 +65,50 @@ class ExternalRepoAgent():
 
         # Standardize to use absolute path
         self.repo_dir = utils.get_absolute_path(repo_dir)
-        self.logger = logging.getLogger(f"agent {self.repo_dir}")
+        self.logger = logging.getLogger(f"ExternalRepoAgent: `{self.repo_dir}`")
         self.model_name = model_name
         self.max_concurrent_llm_queries = max_concurrent_llm_queries
 
-        global START_PORT
-        while True:
-            self._process = subprocess.Popen(f"exec init_aider_instance --port {START_PORT} --model-name {model_name}", cwd=self.repo_dir, shell=True)
-            self.logger.info(f"Attempt to start an aider instance on port {START_PORT} with model {model_name}")
-            self.port = START_PORT
-            START_PORT += 1
-            try:
-                self._process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                if self._process.returncode is None:
-                    self.logger.info(f"aider instance on port {START_PORT} still running, assuming successful")
-                    # TODO: send a ping to check if the agent is alive
-                    # TODO: perform this asynchronously rather than waiting
-                    break
-                self.logger.info(f"aider instance on port {START_PORT} terminated, continue trying...")
-            # process terminated
-            self.logger.info(f"Agent on port {START_PORT} terminated, continue trying...")
+        def get_free_port():
+            import socket
+            sock = socket.socket()
+            sock.bind(('', 0))
+            port = sock.getsockname()[1]
+            sock.close()
+            return port
 
+        for _ in range(max_init_retry):
+            self.port = get_free_port()
+            self.logger.info(f"Attempt to start an aider instance on port {self.port} with model {model_name}")
+            self._process = subprocess.Popen(f"exec init_aider_instance --port {self.port} --model-name {model_name}", cwd=self.repo_dir, shell=True)
+            ping_success = self.wait_for_ping()
+            if ping_success:
+                self.logger.info(f"aider instance on port {self.port} returned ping, successful init")
+                break
+            else:
+                if self._process.poll() is None:
+                    self._process.kill()
+                self.logger.warning(f"aider instance on port {self.port} killed, continue trying...")
+            # process terminated
+            self.logger.info(f"aider instance on port {self.port} terminated, continue trying...")
+
+    def wait_for_ping(self) -> bool:
+        """
+        Wait for the Aider agent to respond with "pong" to a ping request.
+
+        :return: True if the agent responds with "pong", False if timeout is reached.
+        """
+        timeout = 6
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            try:
+                response = requests.get(f"http://0.0.0.0:{self.port}/ping")
+                if response.json() == "pong":
+                    return True
+            except requests.RequestException as e:
+                self.logger.warn(f"Ping request failed: {e}")
+            time.sleep(1)  # Wait for 0.5 seconds before retrying
+        return False
 
     def run(self, msg: str) -> str:
         """
@@ -158,12 +178,17 @@ class ExternalRepoAgent():
 
         :return: "alive" if the process is running, otherwise "dead".
         """
-        # TODO: can use the ping method first instead
         poll = self._process.poll()
-        if poll == None:
-            return "alive"
-        else:
+        if poll is not None:
             return "dead"
+        
+        ping_response = requests.get(
+            f"http://0.0.0.0:{self.port}/ping"
+        )
+        if ping_response == "pong":
+            return "alive"
+        
+        return "dead"
         
     def get_repo_map(self) -> str:
         response = requests.get(
@@ -407,7 +432,7 @@ class PlannerAgent():
         :param model_name: The name of the model to use.
         """
         self.model_name = model_name
-        self.logger = logging.getLogger("planner")
+        #self.logger = logging.getLogger("PlannerAgent")
         self.map_tokens = map_tokens
         self.max_concurrent_llm_queries = max_concurrent_llm_queries
         return
@@ -588,7 +613,7 @@ class Manager():
         self.planner_agent = None
         self.main_aider_agent = None
         self.external_repo_agents = dict()
-        self.logger = logging.getLogger("manager")
+        #self.logger = logging.getLogger("AgentManager")
         self.model_name = model_name
         self.max_reflections = max_reflections
 
@@ -897,9 +922,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the Aider agent manager.")
     parser.add_argument('--port', type=int, help='Port of the agent', default=10000)
     args = parser.parse_args()
-
-    global START_PORT
-    START_PORT = args.port + 1
 
     manager.init_planner_agent()
     manager.init_main_aider_agent()
