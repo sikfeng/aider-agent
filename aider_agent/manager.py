@@ -436,15 +436,18 @@ class PlannerAgent():
     """
     A class to manage the Planner agent.
     """
-    def __init__(self, model_name: str = "azure/gpt-4o", map_tokens=8092, max_concurrent_llm_queries=2) -> None:
+    def __init__(self, model_name: str = "azure/gpt-4o", map_tokens=8092, max_questions=5, max_subtasks=5, max_concurrent_llm_queries=2) -> None:
         """
         Initialize the PlannerAgent.
 
         :param model_name: The name of the model to use.
         """
         self.model_name = model_name
-        #self.logger = logging.getLogger("PlannerAgent")
+        self.logger = logging.getLogger("PlannerAgent")
         self.map_tokens = map_tokens
+
+        self.max_questions = max_questions
+        self.max_subtasks = max_subtasks
         self.max_concurrent_llm_queries = max_concurrent_llm_queries
         return
 
@@ -465,12 +468,12 @@ You will ask questions to find out how you can reuse existing functionality to c
 You should consider the subtasks which you will have to implement, and ask the developer questions relating to those subtasks.
 """
         user_prompt = """
-What information do you need to know to complete the following task? Give at most 10 questions.
+What information do you need to know to complete the following task? Give at most {max_questions} questions.
 Each question should be clear and specific to the task and codebase you are working on.
 
 {objective}
 """
-        user_prompt = user_prompt.format(objective=objective)
+        user_prompt = user_prompt.format(max_questions=self.max_questions, objective=objective)
         questions_response = strict_json(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -479,42 +482,34 @@ Each question should be clear and specific to the task and codebase you are work
         )
 
         questions = questions_response['questions']
+        self.logger.info("Questions: %s", questions)
 
         def ask_aider(question: str) -> str:
             model = Model(self.model_name)
-            with open(os.devnull, "w") as output:
-                io = InputOutput(
-                    pretty=False,
-                    yes=True,
-                    output=output
-                )
-                coder = Coder.create(
-                    main_model=model,
-                    io=io,
-                    suggest_shell_commands=False,
-                    edit_format="ask",
-                    map_tokens=self.map_tokens,
-                )
-                coder.run("""What files do you need to answer the following question?
+            io = InputOutput(
+                pretty=False,
+                yes=True,
+            )
+            coder = Coder.create(
+                main_model=model,
+                io=io,
+                suggest_shell_commands=False,
+                edit_format="ask",
+                map_tokens=self.map_tokens,
+            )
+            coder.run("""What files do you need to answer the following question?
 {question}
-
-Return the files in the format as such.
-```
-file1.py
-file2.js
-file3.json
-```
 """.format(question=question))
-                coder.done_messages = []
-                coder.cur_messages = []
-                response = coder.run("""{question}
+            coder.done_messages = []
+            coder.cur_messages = []
+            response = coder.run("""Answer the following question: {question}
 
 Do NOT write any code for implementing any features. 
 Only respond in natural language.
 Only respond with information about the current codebase.
 Respond with a high level overview of what has already been implemented, and what is missing.
 """)
-                return question, response
+            return question, response
 
         async def limited_ask_aider(semaphore, question):
             async with semaphore:
@@ -542,32 +537,31 @@ Respond with a high level overview of what has already been implemented, and wha
         :param objective: The main objective.
         :return: A list of subtasks.
         """
-        # Restate the problem statement
+        '''# Restate the problem statement
         system_msg = """You are a requirements analyst.
 Restate the following as an instruction for a software developer
 """
         user_msg = objective
         objective = utils.llm(self.model_name)(
             system_prompt=system_msg, user_prompt=user_msg
-        )
+        )'''
 
-        system_msg = """You're a diligent software engineer AI.
-
-Create a plan consisting of multiple tasks to complete the provided objective.
+        system_msg = """You're a software engineer AI.
+Your job is to plan a maximum of {max_subtasks} tasks to complete the provided objective.
+The primary goal is to create a functional Minimum Viable Product (MVP) as quickly as possible.
+These tasks will be given to a new intern developer, hence ensure each task has a clear description.
 
 Each task should be a discrete, actionable step that contributes to the overall objective.
 Do not waste time on uneccessary or redundant steps.
 Don't create needless tasks like "document the findings".
+Do not enumerate the tasks.
 
-These tasks will be given to a new intern developer, hence ensure each task has a clear description.
-
-Here are some questions and answers regarding this codebase.
+Here are some questions and answers regarding the codebase, which you should use to plan.
 {gathered_info}
 
 Do not implement functionality that the user did not ask for, or is already implemented.
-Building, testing and deployment are not required, so do not plan these tasks.
+Do not plan tasks for building, testing, or deploying.
 """
-
 
         # Gather necessary information
         gathered_info = await self.gather_information(objective)
@@ -583,12 +577,12 @@ Building, testing and deployment are not required, so do not plan these tasks.
 {answer}
 """.format(question=question, answer=answer)
 
-        system_msg = system_msg.format(gathered_info=formatted_gathered_info)
+        system_msg = system_msg.format(max_subtasks=self.max_subtasks, gathered_info=formatted_gathered_info)
         #print(system_msg)
 
         res = strict_json(
             system_prompt = system_msg,
-            user_prompt = objective,
+            user_prompt = f"Objective: {objective}",
             output_format = {'Plan': 'Array of subtasks, type: Array[str]'},
             llm = utils.llm(self.model_name)
         )
@@ -782,7 +776,7 @@ If you wish to edit a file, add the file to the chat.
                 if not matches:
                     return None
                 
-                return shell_cmds
+                return matches
 
             # Check for shell commands and files to add in the response
             shell_cmds = check_for_shell_cmds_in_response(curr_response)
