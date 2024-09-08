@@ -7,11 +7,19 @@ import asyncio
 from strictjson import strict_json
 from . import utils
 
+
 class PlannerAgent:
     """
     A class to manage the Planner agent.
     """
-    def __init__(self, model_name: str = "azure/gpt-4o", map_tokens=8092, max_questions=5, max_subtasks=5, max_concurrent_llm_queries=2) -> None:
+
+    def __init__(
+            self,
+            model_name: str = "azure/gpt-4o",
+            map_tokens=8092,
+            max_questions=5,
+            max_subtasks=5,
+            max_concurrent_llm_queries=2) -> None:
         """
         Initialize the PlannerAgent.
 
@@ -48,13 +56,16 @@ Each question should be clear and specific to the task and codebase you are work
 
 {objective}
 """
-        user_prompt = user_prompt.format(max_questions=self.max_questions, objective=objective)
+        user_prompt = user_prompt.format(
+            max_questions=self.max_questions,
+            objective=objective)
         questions_response = strict_json(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
-            output_format={'questions': 'Array of questions, type: Array[str]'},
-            llm=utils.llm(self.model_name)
-        )
+            output_format={
+                'questions': 'Array of questions, type: Array[str]'},
+            llm=utils.llm(
+                self.model_name))
 
         questions = questions_response['questions']
         self.logger.info("Questions: %s", questions)
@@ -72,14 +83,16 @@ Each question should be clear and specific to the task and codebase you are work
                 edit_format="ask",
                 map_tokens=self.map_tokens,
             )
-            coder.run("""What files do you need to answer the following question?
+            coder.run(
+                """What files do you need to answer the following question?
 {question}
-""".format(question=question))
+""".format(
+                    question=question))
             coder.done_messages = []
             coder.cur_messages = []
             response = coder.run("""Answer the following question: {question}
 
-Do NOT write any code for implementing any features. 
+Do NOT write any code for implementing any features.
 Only respond in natural language.
 Only respond with information about the current codebase.
 Respond with a high level overview of what has already been implemented, and what is missing.
@@ -93,13 +106,14 @@ Respond with a high level overview of what has already been implemented, and wha
         semaphore = asyncio.Semaphore(self.max_concurrent_llm_queries)
 
         gathered_info = {}
-        tasks = [limited_ask_aider(semaphore, question) for question in questions]
+        tasks = [limited_ask_aider(semaphore, question)
+                 for question in questions]
         responses = await asyncio.gather(*tasks)
 
         for question, response in responses:
             gathered_info[question] = response
 
-        #print(gathered_info)
+        # print(gathered_info)
         return gathered_info
 
     async def generate_subtasks(self, objective: str) -> list[str]:
@@ -140,27 +154,29 @@ Do not plan tasks for building, testing, or deploying.
 
         # Format gathered_info in markdown
         formatted_gathered_info = ""
-        
+
         for question, answer in gathered_info.items():
-            formatted_gathered_info += """**Question:** 
+            formatted_gathered_info += """**Question:**
 {question}
 
 **Answer:**
 {answer}
 """.format(question=question, answer=answer)
 
-        system_msg = system_msg.format(max_subtasks=self.max_subtasks, gathered_info=formatted_gathered_info)
-        #print(system_msg)
+        system_msg = system_msg.format(
+            max_subtasks=self.max_subtasks,
+            gathered_info=formatted_gathered_info)
+        # print(system_msg)
 
         res = strict_json(
-            system_prompt = system_msg,
-            user_prompt = f"Objective: {objective}",
-            output_format = {'Plan': 'Array of subtasks, type: Array[str]'},
-            llm = utils.llm(self.model_name)
+            system_prompt=system_msg,
+            user_prompt=f"Objective: {objective}",
+            output_format={'Plan': 'Array of subtasks, type: Array[str]'},
+            llm=utils.llm(self.model_name)
         )
-        
+
         return res['Plan']
-    
+
     def finetune_subtasks(self, objective: str, instruction: str) -> list[str]:
         """
         Finetune the generated subtasks based on additional instructions.

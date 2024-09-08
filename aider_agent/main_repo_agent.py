@@ -2,13 +2,17 @@ from aider.coders import Coder
 from aider.models import Model
 from aider.io import InputOutput
 
+
 class MainRepoAgent():
     """
     A class to manage the Aider agent.
     """
     coder = None
 
-    def __init__(self, model_name: str = "azure/gpt-4o", repo_dir: str = ".") -> None:
+    def __init__(
+            self,
+            model_name: str = "azure/gpt-4o",
+            repo_dir: str = ".") -> None:
         """
         Initialize the AiderAgent.
 
@@ -30,7 +34,6 @@ class MainRepoAgent():
         )
         return
 
-
     def run(self, msg: str) -> str:
         """
         Run the agent with the given message.
@@ -41,7 +44,7 @@ class MainRepoAgent():
         try:
             result = self.coder.run("/code " + msg)
             return str(result)
-        except:
+        except BaseException:
             return "error: failed"
 
     def run_stream(self, msg: str):
@@ -53,7 +56,7 @@ class MainRepoAgent():
         """
         for partial_response in self.coder.run_stream("/code " + msg):
             yield partial_response
-        #return self.coder.run_stream(msg)
+        # return self.coder.run_stream(msg)
 
     def ask(self, msg: str):
         """
