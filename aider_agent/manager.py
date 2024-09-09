@@ -159,6 +159,9 @@ class Manager:
         :return: An async generator yielding parts of the response.
         """
 
+        # TODO: something is still running concurrently in here, which gives rate limits
+        # even when external repo agents is empty
+
         await asyncio.gather(*(external_repo_agent.find_relevant_code(subtask) for external_repo_agent in self.external_repo_agents.values()))
 
         for repo_path in self.external_repo_agents:
@@ -166,7 +169,7 @@ class Manager:
             self.logger.info(f"found {code_snippet_filename}")
             try:
                 self.main_repo_agent.run(f"/read-only {code_snippet_filename}")
-            except BaseException:
+            except BaseException: # TODO: use a narrower exception type
                 self.logger.warning(
                     f"{code_snippet_filename} not found, skipping")
 

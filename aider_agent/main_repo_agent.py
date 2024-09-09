@@ -44,7 +44,7 @@ class MainRepoAgent():
         try:
             result = self.coder.run("/code " + msg)
             return str(result)
-        except BaseException:
+        except BaseException: # TODO: use narrower exception
             return "error: failed"
 
     async def run_stream(self, msg: str):
@@ -84,6 +84,5 @@ class MainRepoAgent():
         self.coder.repo_map.repo_content_prefix = _tmp_prefix
         return repo_map
     
-    # TODO: add a method to reset
     def reset(self) -> str:
         return self.run("/reset")
