@@ -1,7 +1,3 @@
-from aider.coders import Coder
-from aider.models import Model
-from aider.io import InputOutput
-
 from .main_repo_agent import MainRepoAgent
 
 import logging
@@ -21,7 +17,8 @@ class PlannerAgent:
             map_tokens=8092,
             max_questions=5,
             max_subtasks=5,
-            max_concurrent_llm_queries=1) -> None:
+            max_concurrent_llm_queries=1,
+            max_reflections: int = 5) -> None:
         """
         Initialize the PlannerAgent.
 
@@ -34,6 +31,8 @@ class PlannerAgent:
         self.max_questions = max_questions
         self.max_subtasks = max_subtasks
         self.max_concurrent_llm_queries = max_concurrent_llm_queries
+        self.max_reflections = max_reflections
+
         return
 
     async def gather_information(self, objective: str) -> dict:
@@ -48,6 +47,12 @@ class PlannerAgent:
         main_repo_agent = MainRepoAgent(model_name=self.model_name)
         repo_map = main_repo_agent.get_repo_map()
         del main_repo_agent
+
+        self.logger.info("Repo Map: %s", repo_map)
+        # if the git repo has no files, repo_map is None
+        # not sure if there is a case where repo_map may be just whitespace but I handle it as the same
+        if repo_map is None or repo_map.strip() == "":
+            return None
 
         # Ask the LLM what questions to ask using strictjson
         system_prompt = """
@@ -92,7 +97,8 @@ Only respond with information about the current codebase.
 Respond with a high level overview of what has already been implemented, and what is missing.
 """
             response = ""
-            for _ in range(5):
+            # TODO: make the max reflections a class variable
+            for _ in range(self.max_reflections):
                 curr_response = ""
                 async for response_chunk in main_repo_agent.ask(query_message):
                     curr_response += response_chunk
@@ -159,9 +165,10 @@ Restate the following as an instruction for a software developer
             system_prompt=system_msg, user_prompt=user_msg
         )'''
 
-        # TODO: handle case where the repo is empty => no gathered info
-
-        system_msg = """You're a software engineer AI.
+        # Gather necessary information
+        gathered_info_summary = await self.gather_information(objective)
+        if gathered_info_summary is None:
+            system_msg = """You're a software engineer AI.
 Your job is to plan a maximum of {max_subtasks} tasks to complete the provided objective.
 The primary goal is to create a functional Minimum Viable Product (MVP) as quickly as possible.
 These tasks will be given to a new intern developer, hence ensure each task has a clear description.
@@ -171,15 +178,26 @@ Do not waste time on uneccessary or redundant steps.
 Don't create needless tasks like "document the findings".
 Do not enumerate the tasks.
 
-Here are some questions and answers regarding the codebase, which you should use to plan.
+Do not implement functionality that the user did not ask for.
+Do not plan tasks for building, testing, or deploying.
+"""
+        else:
+            system_msg = """You're a software engineer AI.
+Your job is to plan a maximum of {max_subtasks} tasks to complete the provided objective.
+The primary goal is to create a functional Minimum Viable Product (MVP) as quickly as possible.
+These tasks will be given to a new intern developer, hence ensure each task has a clear description.
+
+Each task should be a discrete, actionable step that contributes to the overall objective.
+Do not waste time on uneccessary or redundant steps.
+Don't create needless tasks like "document the findings".
+Do not enumerate the tasks.
+
+Here is a summary of the current codebase, which you should use to plan.
 {gathered_info}
 
 Do not implement functionality that the user did not ask for, or is already implemented.
 Do not plan tasks for building, testing, or deploying.
-"""
-
-        # Gather necessary information
-        gathered_info_summary = await self.gather_information(objective)
+    """
 
         system_msg = system_msg.format(
             max_subtasks=self.max_subtasks,
