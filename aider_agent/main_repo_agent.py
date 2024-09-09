@@ -2,6 +2,7 @@ from aider.coders import Coder
 from aider.models import Model
 from aider.io import InputOutput
 
+# TODO: error handling
 
 class MainRepoAgent():
     """
@@ -76,7 +77,12 @@ class MainRepoAgent():
         return self.run("/run " + cmd)
 
     def get_repo_map(self) -> str:
-        return self.coder.get_repo_map()
+        # Hack to remove the repomap prefix
+        _tmp_prefix = self.coder.repo_map.repo_content_prefix
+        self.coder.repo_map.repo_content_prefix = None
+        repo_map = self.coder.get_repo_map()
+        self.coder.repo_map.repo_content_prefix = _tmp_prefix
+        return repo_map
     
     # TODO: add a method to reset
     def reset(self) -> str:
