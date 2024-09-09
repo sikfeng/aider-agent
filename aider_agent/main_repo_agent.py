@@ -11,8 +11,7 @@ class MainRepoAgent():
 
     def __init__(
             self,
-            model_name: str = "azure/gpt-4o",
-            repo_dir: str = ".") -> None:
+            model_name: str = "azure/gpt-4o") -> None:
         """
         Initialize the AiderAgent.
 
@@ -47,7 +46,7 @@ class MainRepoAgent():
         except BaseException:
             return "error: failed"
 
-    def run_stream(self, msg: str):
+    async def run_stream(self, msg: str):
         """
         Run the agent with the given message and stream the response.
 
@@ -78,3 +77,7 @@ class MainRepoAgent():
 
     def get_repo_map(self) -> str:
         return self.coder.get_repo_map()
+    
+    # TODO: add a method to reset
+    def reset(self) -> str:
+        return self.run("/reset")

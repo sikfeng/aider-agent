@@ -27,7 +27,7 @@ class ExternalRepoAgent():
             self,
             repo_dir: str,
             model_name: str = "azure/gpt-4o",
-            max_concurrent_llm_queries: int = 3,
+            max_concurrent_llm_queries: int = 1,
             max_init_retry=5) -> None:
         """
         Initialize the AiderAgent.
@@ -275,7 +275,7 @@ For each of the above files, look through the repository structure to suggest th
             return
 
         # Step 3: Get the code snippets that were requested, and do one more round of checking if they are actually relevant
-        # Create a semaphore with a limit of 3
+        # Create a semaphore to limit concurrent queries
         semaphore = asyncio.Semaphore(self.max_concurrent_llm_queries)
 
         async def process_file(filename, semaphore):

@@ -44,7 +44,8 @@ class Manager:
     """
 
     def __init__(self, model_name: str = "azure/gpt-4o",
-                 max_reflections: int = 5) -> None:
+                 max_reflections: int = 5,
+                 max_concurrent_queries: int = 1) -> None:
         """
         Initialize the Manager.
         """
@@ -54,6 +55,9 @@ class Manager:
         self.logger = logging.getLogger("AgentManager")
         self.model_name = model_name
         self.max_reflections = max_reflections
+        self.max_concurrent_queries = max_concurrent_queries
+
+        self.semaphore = asyncio.Semaphore(self.max_concurrent_queries)  # Initialize the semaphore
 
         def _os_name() -> str:
             current_platform = platform.system()
@@ -300,8 +304,6 @@ If you wish to edit a file, add the file to the chat.
 
 
 manager = Manager()
-
-# create agent
 
 
 @app.post("/init_external_repo_agent")

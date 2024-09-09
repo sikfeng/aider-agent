@@ -2,6 +2,8 @@ from aider.coders import Coder
 from aider.models import Model
 from aider.io import InputOutput
 
+from .main_repo_agent import MainRepoAgent
+
 import logging
 import asyncio
 from strictjson import strict_json
@@ -19,7 +21,7 @@ class PlannerAgent:
             map_tokens=8092,
             max_questions=5,
             max_subtasks=5,
-            max_concurrent_llm_queries=2) -> None:
+            max_concurrent_llm_queries=1) -> None:
         """
         Initialize the PlannerAgent.
 
@@ -41,20 +43,30 @@ class PlannerAgent:
         :param objective: The main objective.
         :return: A dictionary containing the gathered information.
         """
+        # TODO: this is very messy instantiating multiple MainRepoAgents, can it be cleaner?
+        # TODO: handle case where repo is empty => repo map is empty
+        main_repo_agent = MainRepoAgent(model_name=self.model_name)
+        repo_map = main_repo_agent.get_repo_map()
+        del main_repo_agent
+
         # Ask the LLM what questions to ask using strictjson
         system_prompt = """
 You are a software engineer gathering information to complete a task. However, you suspect that some functionality has already been implemented, which you can reuse.
+
+Here is a summary of the repository:
+{repo_map}
 
 There is another software developer which understands the codebase which you will work on.
 
 You will ask questions to find out how you can reuse existing functionality to complete your task.
 You should consider the subtasks which you will have to implement, and ask the developer questions relating to those subtasks.
-"""
-        user_prompt = """
-What information do you need to know to complete the following task? Give at most {max_questions} questions.
+Ask at most {max_questions}.
 Each question should be clear and specific to the task and codebase you are working on.
-
-{objective}
+"""
+        system_prompt = system_prompt.format(
+            repo_map=repo_map, max_questions=self.max_questions)
+        user_prompt = """
+This is the objective to be completed: {objective}
 """
         user_prompt = user_prompt.format(
             max_questions=self.max_questions,
@@ -63,40 +75,32 @@ Each question should be clear and specific to the task and codebase you are work
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             output_format={
-                'questions': 'Array of questions, type: Array[str]'},
+                'questions': 'Array of strings which are questions to ask, type: Array[str]'},
             llm=utils.llm(
                 self.model_name))
 
         questions = questions_response['questions']
         self.logger.info("Questions: %s", questions)
 
-        def ask_aider(question: str) -> str:
-            model = Model(self.model_name)
-            io = InputOutput(
-                pretty=False,
-                yes=True,
-            )
-            coder = Coder.create(
-                main_model=model,
-                io=io,
-                suggest_shell_commands=False,
-                edit_format="ask",
-                map_tokens=self.map_tokens,
-            )
-            coder.run(
-                """What files do you need to answer the following question?
-{question}
-""".format(
-                    question=question))
-            coder.done_messages = []
-            coder.cur_messages = []
-            response = coder.run("""Answer the following question: {question}
+        async def ask_aider(question: str) -> str:
+            main_repo_agent = MainRepoAgent(model_name=self.model_name)
+            query_message = f"""Answer the following question: {question}
 
 Do NOT write any code for implementing any features.
 Only respond in natural language.
 Only respond with information about the current codebase.
 Respond with a high level overview of what has already been implemented, and what is missing.
-""")
+"""
+            response = ""
+            for _ in range(5):
+                curr_response = ""
+                async for response_chunk in main_repo_agent.ask(query_message):
+                    curr_response += response_chunk
+                response += curr_response + "\n"
+                if main_repo_agent.coder.reflected_message is None:
+                    break
+                else:
+                    query_message = main_repo_agent.coder.reflected_message
             return question, response
 
         async def limited_ask_aider(semaphore, question):
@@ -105,16 +109,39 @@ Respond with a high level overview of what has already been implemented, and wha
 
         semaphore = asyncio.Semaphore(self.max_concurrent_llm_queries)
 
-        gathered_info = {}
+        gathered_info = []
         tasks = [limited_ask_aider(semaphore, question)
                  for question in questions]
         responses = await asyncio.gather(*tasks)
+        responses = await asyncio.gather(*responses)
 
         for question, response in responses:
-            gathered_info[question] = response
+            gathered_info.append((question, response))
 
-        # print(gathered_info)
-        return gathered_info
+        # Format gathered_info in markdown
+        formatted_gathered_info = ""
+
+        for question, answer in gathered_info:
+            formatted_gathered_info += """**Question:**
+{question}
+
+**Answer:**
+{answer}
+""".format(question=question, answer=answer)
+        self.logger.info("Gathered Information: %s", formatted_gathered_info)
+
+        # Summarize the gathered information
+        summary_prompt = """
+{formatted_gathered_info}
+"""
+        summary_prompt = summary_prompt.format(
+            formatted_gathered_info=formatted_gathered_info)
+        summary_response = utils.llm(
+            self.model_name)(
+            system_prompt="""You are a software engineer. Given the list of questions and answers asked, extract the key points from the answers""",
+            user_prompt=f"{formatted_gathered_info}")
+        self.logger.info("Summary: %s", summary_response)
+        return summary_response
 
     async def generate_subtasks(self, objective: str) -> list[str]:
         """
@@ -131,6 +158,8 @@ Restate the following as an instruction for a software developer
         objective = utils.llm(self.model_name)(
             system_prompt=system_msg, user_prompt=user_msg
         )'''
+
+        # TODO: handle case where the repo is empty => no gathered info
 
         system_msg = """You're a software engineer AI.
 Your job is to plan a maximum of {max_subtasks} tasks to complete the provided objective.
@@ -150,22 +179,11 @@ Do not plan tasks for building, testing, or deploying.
 """
 
         # Gather necessary information
-        gathered_info = await self.gather_information(objective)
-
-        # Format gathered_info in markdown
-        formatted_gathered_info = ""
-
-        for question, answer in gathered_info.items():
-            formatted_gathered_info += """**Question:**
-{question}
-
-**Answer:**
-{answer}
-""".format(question=question, answer=answer)
+        gathered_info_summary = await self.gather_information(objective)
 
         system_msg = system_msg.format(
             max_subtasks=self.max_subtasks,
-            gathered_info=formatted_gathered_info)
+            gathered_info=gathered_info_summary)
         # print(system_msg)
 
         res = strict_json(
