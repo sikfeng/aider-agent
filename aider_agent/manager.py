@@ -6,11 +6,15 @@ Better error handling
 Implement subtask finetuning
 Set up litellm load balancing, retries, timeouts etc. https://docs.litellm.ai/docs/proxy/reliability
 '''
+from logging.config import dictConfig
+from .logging import log_config
+dictConfig(log_config)
 
 from .main_repo_agent import MainRepoAgent
 from .planner_agent import PlannerAgent
 from .external_repo_agent import InitExternalRepoAgentError, ExternalRepoAgent
 from . import utils
+
 import re
 from typing import AsyncGenerator, List, Dict, Optional
 from strictjson import *
