@@ -15,19 +15,22 @@ litellm.suppress_debug_info = True
 litellm.set_verbose = False
 litellm.drop_params = True
 
-
 app = FastAPI()
 
-class Agent:
-    """A class to manage the Aider agent."""
-    def __init__(self, llm_name: str = "azure/gpt-4o", map_tokens: int = 8092) -> None:
-        """Initialize the Agent.
+class BaseRepoAgent:
+    """A base class to manage common functionalities for RepoAgents that call Aider."""
 
-        :param llm_name: The name of the model to use.
+    def __init__(
+            self,
+            model_name: str = "azure/gpt-4o",
+            map_tokens: int = 8092) -> None:
+        """Initialize the BaseRepoAgent.
+
+        :param model_name: The name of the model to use.
         :param map_tokens: Maximum number of tokens for the repo map.
         """
-        self.llm_name = llm_name
-        self.model = Model(llm_name)
+        self.model_name = model_name
+        self.model = Model(model_name)
         self.map_tokens = map_tokens
 
         self.io = InputOutput(
@@ -40,15 +43,6 @@ class Agent:
             map_tokens=map_tokens,
             suggest_shell_commands=False,
         )
-        self.repo_map = self.coder.get_repo_map()
-
-    def run_stream(self, msg: str) -> AsyncGenerator[str, None]:
-        """Run the agent with the given message and stream the response.
-
-        :param msg: The message to process.
-        :return: An async generator yielding parts of the response.
-        """
-        return self.coder.run_stream("/code " + msg)
 
     def run(self, msg: str) -> str:
         """Run the agent with the given message.
@@ -61,6 +55,15 @@ class Agent:
             return str(result)
         except Exception as e:
             return f"error: failed due to {e}"
+
+    async def run_stream(self, msg: str) -> AsyncGenerator[str, None]:
+        """Run the agent with the given message and stream the response.
+
+        :param msg: The message to process.
+        :return: An async generator yielding parts of the response.
+        """
+        for partial_response in self.coder.run_stream("/code " + msg):
+            yield partial_response
 
     def ask(self, msg: str) -> AsyncGenerator[str, None]:
         """Ask a question to the agent.
@@ -77,9 +80,33 @@ class Agent:
         repo_map = self.coder.get_repo_map()
         self.coder.repo_map.repo_content_prefix = _tmp_prefix
         return repo_map
-    
+
     def reset(self) -> str:
         return self.run("/reset")
+
+class Agent(BaseRepoAgent):
+    """A class to manage the Aider agent."""
+
+    def __init__(
+            self,
+            llm_name: str = "azure/gpt-4o",
+            map_tokens: int = 8092) -> None:
+        """Initialize the Agent.
+
+        :param llm_name: The name of the model to use.
+        :param map_tokens: Maximum number of tokens for the repo map.
+        """
+        super().__init__(model_name=llm_name, map_tokens=map_tokens)
+
+class MainRepoAgent(BaseRepoAgent):
+    """A class to manage the Main Repo agent."""
+
+    def __init__(self, model_name: str = "azure/gpt-4o") -> None:
+        """Initialize the MainRepoAgent.
+
+        :param model_name: The name of the model to use.
+        """
+        super().__init__(model_name=model_name)
 
 # Global agent instance
 agent: Agent = None
@@ -139,10 +166,23 @@ def main() -> None:
     """
     Main function to run the agent application.
     """
-    parser = argparse.ArgumentParser(description="Start an aider instance.")
-    parser.add_argument('--port', type=int, help='Port for http requests', default=8080)
-    parser.add_argument('--model-name', type=str, help='Name of the model to use', default="azure/gpt-4o")
-    parser.add_argument('--map-tokens', type=int, help='Maximum number of tokens for repo map', default=8092)
+    parser = argparse.ArgumentParser(
+        description="Start an aider instance.")
+    parser.add_argument(
+        '--port',
+        type=int,
+        help='Port for http requests',
+        default=8080)
+    parser.add_argument(
+        '--model-name',
+        type=str,
+        help='Name of the model to use',
+        default="azure/gpt-4o")
+    parser.add_argument(
+        '--map-tokens',
+        type=int,
+        help='Maximum number of tokens for repo map',
+        default=8092)
     args = parser.parse_args()
 
     global agent

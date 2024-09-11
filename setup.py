@@ -27,7 +27,7 @@ setup(
     package_dir={"aider_agent": "aider_agent"},
     entry_points={
         "console_scripts": [
-            "init_aider_instance = aider_agent.aider_instance:main",
+            "init_aider_instance = aider_agent.repo_agent:main",
             "manager = aider_agent.manager:main",
         ],
     },

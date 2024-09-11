@@ -13,7 +13,7 @@ from logging.config import dictConfig
 from .logger import log_config
 dictConfig(log_config)
 
-from .main_repo_agent import MainRepoAgent
+from .repo_agent import MainRepoAgent
 from .planner_agent import PlannerAgent
 from .external_repo_agent import InitExternalRepoAgentError, ExternalRepoAgent
 from . import utils
@@ -39,9 +39,6 @@ import litellm
 litellm.suppress_debug_info = True
 litellm.set_verbose = False
 litellm.drop_params = True
-
-
-#logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
