@@ -1,4 +1,4 @@
-from .main_repo_agent import MainRepoAgent
+from .repo_agent import MainRepoAgent
 
 import logging
 import asyncio
@@ -100,7 +100,7 @@ Respond with a high level overview of what has already been implemented, and wha
             # TODO: make the max reflections a class variable
             for _ in range(self.max_reflections):
                 curr_response = ""
-                async for response_chunk in main_repo_agent.ask(query_message):
+                for response_chunk in main_repo_agent.ask(query_message):
                     curr_response += response_chunk
                 response += curr_response + "\n"
                 if main_repo_agent.coder.reflected_message is None:
