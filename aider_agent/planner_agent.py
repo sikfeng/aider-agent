@@ -50,7 +50,8 @@ class PlannerAgent:
 
         self.logger.info("Repo Map: %s", repo_map)
         # if the git repo has no files, repo_map is None
-        # not sure if there is a case where repo_map may be just whitespace but I handle it as the same
+        # not sure if there is a case where repo_map may be just whitespace but
+        # I handle it as the same
         if repo_map is None or repo_map.strip() == "":
             return None
 

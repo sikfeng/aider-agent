@@ -9,32 +9,28 @@ Overload coder.fmt_system_prompt() to continue generating shell commands
 Draw mermaid diagram showing flow of top level functions from Manager
 Set up litellm load balancing, retries, timeouts etc. https://docs.litellm.ai/docs/proxy/reliability
 '''
+import litellm
+from distro import name as distro_name
+import platform
+import signal
+import os
+from pathlib import Path
+import asyncio
+import logging
+import argparse
+from fastapi.responses import StreamingResponse
+from fastapi import FastAPI
+from strictjson import *
+from typing import AsyncGenerator, List, Dict, Optional
+import re
+from . import utils
+from .external_repo_agent_handler import InitExternalRepoAgentError, ExternalRepoAgentHandler
+from .planner_agent import PlannerAgent
+from .repo_agent import MainRepoAgent
 from logging.config import dictConfig
 from .logger import log_config
 dictConfig(log_config)
 
-from .repo_agent import MainRepoAgent
-from .planner_agent import PlannerAgent
-from .external_repo_agent_handler import InitExternalRepoAgentError, ExternalRepoAgentHandler
-from . import utils
-
-import re
-from typing import AsyncGenerator, List, Dict, Optional
-from strictjson import *
-from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
-
-import argparse
-import logging
-
-import asyncio
-from pathlib import Path
-import os
-import signal
-import platform
-from distro import name as distro_name
-
-import litellm
 
 litellm.suppress_debug_info = True
 litellm.set_verbose = False
@@ -56,13 +52,15 @@ class Manager:
         """
         self.planner_agent: Optional[PlannerAgent] = None
         self.main_repo_agent: Optional[MainRepoAgent] = None
-        self.external_repo_agent_handlers: Dict[str, ExternalRepoAgentHandler] = dict()
+        self.external_repo_agent_handlers: Dict[str,
+                                                ExternalRepoAgentHandler] = dict()
         self.logger = logging.getLogger("AgentManager")
         self.model_name = model_name
         self.max_reflections = max_reflections
         self.max_concurrent_queries = max_concurrent_queries
 
-        self.semaphore = asyncio.Semaphore(self.max_concurrent_queries)  # Initialize the semaphore
+        self.semaphore = asyncio.Semaphore(
+            self.max_concurrent_queries)  # Initialize the semaphore
 
         def _os_name() -> str:
             current_platform = platform.system()
@@ -106,22 +104,28 @@ class Manager:
         """
         repo_dir = utils.get_absolute_path(repo_dir)
         if not Path(repo_dir).is_dir():
-            self.logger.warning(f"Attempt to initialize ExternalRepoAgent on non-existent directory {repo_dir}, skipping.")
+            self.logger.warning(
+                f"Attempt to initialize ExternalRepoAgent on non-existent directory {repo_dir}, skipping.")
             return False
         if repo_dir == utils.get_absolute_path("."):
-            self.logger.warning("Attempt to initialize ExternalRepoAgent on main repo, skipping.")
+            self.logger.warning(
+                "Attempt to initialize ExternalRepoAgent on main repo, skipping.")
             return False
         if repo_dir in self.external_repo_agent_handlers:
-            self.logger.warning("Attempt to initialize a new ExternalRepoAgent on already initialized repo, skipping.")
+            self.logger.warning(
+                "Attempt to initialize a new ExternalRepoAgent on already initialized repo, skipping.")
             return False
 
         try:
-            agent = ExternalRepoAgentHandler(model_name=model_name, repo_dir=repo_dir)
+            agent = ExternalRepoAgentHandler(
+                model_name=model_name, repo_dir=repo_dir)
             self.external_repo_agent_handlers[repo_dir] = agent
-            self.logger.info(f"Successfully initialized an ExternalRepoAgent on {repo_dir}.")
+            self.logger.info(
+                f"Successfully initialized an ExternalRepoAgent on {repo_dir}.")
             return True
         except InitExternalRepoAgentError as e:
-            self.logger.warning(f"Failed to initialize an ExternalRepoAgent on {repo_dir}.")
+            self.logger.warning(
+                f"Failed to initialize an ExternalRepoAgent on {repo_dir}.")
             return False
 
     def init_main_repo_agent(self, model_name: str = "azure/gpt-4o") -> bool:
@@ -135,7 +139,7 @@ class Manager:
             self.main_repo_agent = MainRepoAgent(model_name=model_name)
             self.logger.info("MainRepoAgent successfully initialized.")
             return True
-        except:
+        except BaseException:
             self.logger.error("MainRepoAgent failed to initialize.")
             return False
 
@@ -150,7 +154,7 @@ class Manager:
             self.planner_agent = PlannerAgent(model_name)
             self.logger.info("PlannerAgent successfully initialized.")
             return True
-        except:
+        except BaseException:
             self.logger.error("PlannerAgent failed to initialize.")
             return False
 
@@ -194,7 +198,7 @@ class Manager:
             self.logger.info(f"Found {code_snippet_filename}.")
             try:
                 self.main_repo_agent.run(f"/read-only {code_snippet_filename}")
-            except BaseException: # TODO: use a narrower exception type
+            except BaseException:  # TODO: use a narrower exception type
                 self.logger.warning(
                     f"Did not find {code_snippet_filename}, skipping.")
 
@@ -319,7 +323,8 @@ If you wish to edit a file, add the file to the chat.
 
         :return: A list of initialized Aider agents.
         """
-        self.logger.debug(f"ExternalRepoAgents: {self.external_repo_agent_handlers.keys}")
+        self.logger.debug(
+            f"ExternalRepoAgents: {self.external_repo_agent_handlers.keys}")
         return list(self.external_repo_agent_handlers.keys())
 
     def shutdown(self) -> str:
@@ -332,6 +337,7 @@ If you wish to edit a file, add the file to the chat.
             self.logger.info(f"Killing ExternalRepoAgent on {repo_dir}.")
             external_repo_agent.kill()
         return "shutdown"
+
 
 manager = Manager()
 

@@ -38,7 +38,8 @@ class ExternalRepoAgentHandler():
         """
 
         if not Path(repo_dir).is_dir():
-            self.logger.error(f"Attempt to initialize ExternalRepoAgent on non-existent directory {repo_dir}.")
+            self.logger.error(
+                f"Attempt to initialize ExternalRepoAgent on non-existent directory {repo_dir}.")
             raise FileNotFoundError
 
         # Standardize to use absolute path
@@ -46,7 +47,8 @@ class ExternalRepoAgentHandler():
         self.logger = logging.getLogger(
             f"ExternalRepoAgent: {self.repo_dir}")
         self.model_name = model_name
-        self.max_concurrent_llm_queries = max_concurrent_llm_queries # TODO: assert that this value is sensible
+        # TODO: assert that this value is sensible
+        self.max_concurrent_llm_queries = max_concurrent_llm_queries
         self.code_snippet_filename = utils.get_absolute_path(
             f"code_snippets_{self.repo_dir.replace('/', '').replace('.','')}.txt")
 
@@ -96,7 +98,7 @@ class ExternalRepoAgentHandler():
         :return: True if the agent responds with "pong", False if timeout is reached.
         """
         self.logger.info("Waiting for ping response.")
-        timeout = 6 # TODO: set as class variable
+        timeout = 6  # TODO: set as class variable
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:

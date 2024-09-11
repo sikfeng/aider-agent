@@ -17,6 +17,7 @@ litellm.drop_params = True
 
 app = FastAPI()
 
+
 class BaseRepoAgent:
     """A base class to manage common functionalities for RepoAgents that call Aider."""
 
@@ -84,6 +85,7 @@ class BaseRepoAgent:
     def reset(self) -> str:
         return self.run("/reset")
 
+
 class ExternalRepoAgent(BaseRepoAgent):
     """A class to manage the ExternalRepoAgent."""
 
@@ -98,10 +100,14 @@ class ExternalRepoAgent(BaseRepoAgent):
         """
         super().__init__(model_name=llm_name, map_tokens=map_tokens)
 
+
 class MainRepoAgent(BaseRepoAgent):
     """A class to manage the Main Repo agent."""
 
-    def __init__(self, model_name: str = "azure/gpt-4o", map_tokens: int = 1024) -> None:
+    def __init__(
+            self,
+            model_name: str = "azure/gpt-4o",
+            map_tokens: int = 1024) -> None:
         """Initialize the MainRepoAgent.
 
         :param model_name: The name of the model to use.
@@ -109,10 +115,13 @@ class MainRepoAgent(BaseRepoAgent):
         """
         super().__init__(model_name=model_name)
 
+
 # Global agent instance
 agent: ExternalRepoAgent = None
 
 # send a message to aider
+
+
 @app.post("/msg")
 def send_msg(msg: str) -> dict:
     """API endpoint to send a message to the agent.
@@ -124,6 +133,8 @@ def send_msg(msg: str) -> dict:
     return {"result": result}
 
 # send a message to aider, but get stream
+
+
 @app.post("/run_stream")
 async def run_stream(msg: str) -> StreamingResponse:
     """API endpoint to send a message to the agent and get a streaming response.
@@ -134,6 +145,8 @@ async def run_stream(msg: str) -> StreamingResponse:
     return StreamingResponse(agent.run_stream(msg))
 
 # ask aider
+
+
 @app.post("/ask")
 async def ask(msg: str) -> StreamingResponse:
     """API endpoint to ask a question to the agent.
@@ -142,6 +155,7 @@ async def ask(msg: str) -> StreamingResponse:
     :return: A StreamingResponse with the result of the question.
     """
     return StreamingResponse(agent.ask(msg))
+
 
 @app.get("/get_repo_map")
 def get_repo_map() -> str:
@@ -153,6 +167,7 @@ def get_repo_map() -> str:
     result = agent.get_repo_map()
     return result
 
+
 @app.get("/ping")
 def ping() -> str:
     """
@@ -162,6 +177,7 @@ def ping() -> str:
     """
     result = "pong"
     return result
+
 
 def main() -> None:
     """
@@ -187,10 +203,13 @@ def main() -> None:
     args = parser.parse_args()
 
     global agent
-    agent = ExternalRepoAgent(llm_name=args.model_name, map_tokens=args.map_tokens)
+    agent = ExternalRepoAgent(
+        llm_name=args.model_name,
+        map_tokens=args.map_tokens)
 
     import uvicorn  # Import here to avoid unnecessary dependency if not running as main
     uvicorn.run(app, host="0.0.0.0", port=args.port)
+
 
 if __name__ == "__main__":
     main()
