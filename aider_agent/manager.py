@@ -4,10 +4,13 @@ TODO
 Decide whether to use http or websockets
 Better error handling
 Implement subtask finetuning
+Move prompts out of the code
+Overload coder.fmt_system_prompt() to continue generating shell commands
+Draw mermaid diagram showing flow of top level functions from Manager
 Set up litellm load balancing, retries, timeouts etc. https://docs.litellm.ai/docs/proxy/reliability
 '''
 from logging.config import dictConfig
-from .logging import log_config
+from .logger import log_config
 dictConfig(log_config)
 
 from .main_repo_agent import MainRepoAgent
@@ -25,6 +28,7 @@ import argparse
 import logging
 
 import asyncio
+from pathlib import Path
 import os
 import signal
 import platform
@@ -37,7 +41,7 @@ litellm.set_verbose = False
 litellm.drop_params = True
 
 
-logging.basicConfig(level=logging.INFO)
+#logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
@@ -95,46 +99,63 @@ class Manager:
     def init_external_repo_agent(
             self,
             repo_dir: str,
-            model_name: str = "azure/gpt-4o") -> str:
+            model_name: str = "azure/gpt-4o") -> bool:
         """
         Initialize an Aider agent.
 
         :param repo_dir: The directory of the repository.
         :param model_name: The name of the model to use.
-        :return: "success" if the agent is initialized, otherwise an error message.
+        :return: True if the agent is initialized, otherwise False.
         """
         repo_dir = utils.get_absolute_path(repo_dir)
+        if not Path(repo_dir).is_dir():
+            self.logger.warning(f"Attempt to initialize ExternalRepoAgent on non-existent directory {repo_dir}, skipping.")
+            return False
         if repo_dir == utils.get_absolute_path("."):
-            return "error: cannot initialize agent on current directory"
+            self.logger.warning("Attempt to initialize ExternalRepoAgent on main repo, skipping.")
+            return False
         if repo_dir in self.external_repo_agents:
-            return "error: agent already initialized on this repo dir"
+            self.logger.warning("Attempt to initialize a new ExternalRepoAgent on already initialized repo, skipping.")
+            return False
 
         try:
             agent = ExternalRepoAgent(model_name=model_name, repo_dir=repo_dir)
             self.external_repo_agents[repo_dir] = agent
-            return "success"
+            self.logger.info(f"Successfully initialized an ExternalRepoAgent on {repo_dir}.")
+            return True
         except InitExternalRepoAgentError as e:
-            return str(e)
+            self.logger.warning(f"Failed to initialize an ExternalRepoAgent on {repo_dir}.")
+            return False
 
-    def init_main_repo_agent(self, model_name: str = "azure/gpt-4o") -> str:
+    def init_main_repo_agent(self, model_name: str = "azure/gpt-4o") -> bool:
         """
         Initialize the main Aider agent.
 
         :param model_name: The name of the model to use.
-        :return: "success" if the agent is initialized.
+        :return: True if the agent is initialized, otherwise False.
         """
-        self.main_repo_agent = MainRepoAgent(model_name=model_name)
-        return "success"
+        try:
+            self.main_repo_agent = MainRepoAgent(model_name=model_name)
+            self.logger.info("MainRepoAgent successfully initialized.")
+            return True
+        except:
+            self.logger.error("MainRepoAgent failed to initialize.")
+            return False
 
-    def init_planner_agent(self, model_name: str = "azure/gpt-4o") -> str:
+    def init_planner_agent(self, model_name: str = "azure/gpt-4o") -> bool:
         """
         Initialize the Planner agent.
 
         :param model_name: The name of the model to use.
-        :return: "success" if the agent is initialized.
+        :return: True if the agent is initialized, otherwise False.
         """
-        self.planner_agent = PlannerAgent(model_name)
-        return "success"
+        try:
+            self.planner_agent = PlannerAgent(model_name)
+            self.logger.info("PlannerAgent successfully initialized.")
+            return True
+        except:
+            self.logger.error("PlannerAgent failed to initialize.")
+            return False
 
     async def generate_subtasks(self, objective: str) -> List[str]:
         """
@@ -143,6 +164,7 @@ class Manager:
         :param objective: The main objective.
         :return: A list of subtasks.
         """
+        self.logger.info(f"Generating subtasks for {objective}.")
         return await self.planner_agent.generate_subtasks(objective)
 
     def finetune_subtasks(self, objective: str, instruction: str) -> List[str]:
@@ -153,7 +175,7 @@ class Manager:
         :param instruction: Additional instructions for finetuning.
         :return: A list of finetuned subtasks.
         """
-        return "TODO"
+        raise NotImplementedError
 
     async def run_subtask(self, subtask: str) -> AsyncGenerator[str, None]:
         """
@@ -166,16 +188,18 @@ class Manager:
         # TODO: something is still running concurrently in here, which gives rate limits
         # even when external repo agents is empty
 
+        self.logger.info(f"Starting to run {subtask}.")
+        self.logger.info(f"Querying ExternalRepoAgents.")
         await asyncio.gather(*(external_repo_agent.find_relevant_code(subtask) for external_repo_agent in self.external_repo_agents.values()))
 
         for repo_path in self.external_repo_agents:
             code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
-            self.logger.info(f"found {code_snippet_filename}")
+            self.logger.info(f"Found {code_snippet_filename}.")
             try:
                 self.main_repo_agent.run(f"/read-only {code_snippet_filename}")
             except BaseException: # TODO: use a narrower exception type
                 self.logger.warning(
-                    f"{code_snippet_filename} not found, skipping")
+                    f"Did not find {code_snippet_filename}, skipping.")
 
         completed_tasks = ""
 
@@ -205,6 +229,7 @@ If you wish to edit a file, add the file to the chat.
         response = ""
         for _ in range(self.max_reflections):
             curr_response = ""
+            self.logger.debug(f"Message: {message}")
             async for partial_response in self.main_repo_agent.run_stream(message):
                 curr_response += partial_response
                 yield partial_response
@@ -242,6 +267,7 @@ If you wish to edit a file, add the file to the chat.
 
             # Check for shell commands and files to add in the response
             shell_cmds = check_for_shell_cmds_in_response(curr_response)
+            self.logger.debug(f"Found shell commands {shell_cmds}")
 
             if shell_cmds is not None:
                 for command in shell_cmds:
@@ -259,20 +285,22 @@ If you wish to edit a file, add the file to the chat.
 
         self.completed_subtasks.append(subtask)
 
-    def undo_last_subtask(self) -> str:
+    def undo_last_subtask(self) -> bool:
         """
         Undo the last completed subtask.
 
-        :return: The result of the undo operation.
+        :return: True if the undo operation was successful, otherwise False.
         """
-        if len(self.completed_subtasks):
+        if len(self.completed_subtasks) > 0:
             self.completed_subtasks.pop()
+            # TODO: check if result was successful
             result = self.main_repo_agent.run('/undo')
-            return result
+            return True
         else:
-            return "error: no previously completed subtasks"
+            self.logger.warning("No previously completed subtasks.")
+            return False
 
-    async def confirm_run_subtasks(
+    async def run_multiple_subtasks(
             self, subtasks: List[str]) -> AsyncGenerator[str, None]:
         """
         Confirm and run the generated subtasks.
@@ -280,7 +308,6 @@ If you wish to edit a file, add the file to the chat.
         :param subtasks: The list of subtasks to run.
         :return: An async generator yielding parts of the response.
         """
-
         responses = []
         for subtask in subtasks:
             response = ""
@@ -289,14 +316,13 @@ If you wish to edit a file, add the file to the chat.
                 yield partial_response
             responses.append(response)
 
-        # return responses
-
     def get_external_repo_agents(self) -> List[str]:
         """
         Get a list of all initialized Aider agents.
 
         :return: A list of initialized Aider agents.
         """
+        self.logger.debug(f"ExternalRepoAgents: {self.external_repo_agents.keys}")
         return list(self.external_repo_agents.keys())
 
     def shutdown(self) -> str:
@@ -305,10 +331,10 @@ If you wish to edit a file, add the file to the chat.
 
         :return: "shutdown" after shutting down all agents.
         """
-        for external_repo_agent in self.external_repo_agents.values():
+        for repo_dir, external_repo_agent in self.external_repo_agents.items():
+            self.logger.info(f"Killing ExternalRepoAgent on {repo_dir}.")
             external_repo_agent.kill()
         return "shutdown"
-
 
 manager = Manager()
 
@@ -322,7 +348,10 @@ async def init_external_repo_agent(repo_dir: str) -> str:
     :return: The result of the initialization.
     """
     result = manager.init_external_repo_agent(repo_dir)
-    return result
+    if result:
+        return "Success"
+    else:
+        return "Failure"
 
 
 @app.get("/get_external_repo_agents")
@@ -385,15 +414,15 @@ def undo_last_subtask() -> str:
 # confirm run subtasks
 
 
-@app.post("/confirm_run_subtasks")
-async def confirm_run_subtasks(subtasks: List[str]) -> StreamingResponse:
+@app.post("/run_multiple_subtasks")
+async def run_multiple_Subtasks(subtasks: List[str]) -> StreamingResponse:
     """
     API endpoint to confirm and run the generated subtasks.
 
     :param subtasks: The list of subtasks to run.
     :return: The list of responses from running the subtasks.
     """
-    return StreamingResponse(manager.confirm_run_subtasks(subtasks))
+    return StreamingResponse(manager.run_multiple_subtasks(subtasks))
 
 
 @app.get("/shutdown")

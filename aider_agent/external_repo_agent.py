@@ -37,16 +37,21 @@ class ExternalRepoAgent():
         :param max_concurrent_llm_queries: The maximum number of concurrent LLM queries.
         """
 
+        if not Path(repo_dir).is_dir():
+            self.logger.error(f"Attempt to initialize ExternalRepoAgent on non-existent directory {repo_dir}.")
+            raise FileNotFoundError
+
         # Standardize to use absolute path
         self.repo_dir = utils.get_absolute_path(repo_dir)
         self.logger = logging.getLogger(
-            f"ExternalRepoAgent: `{self.repo_dir}`")
+            f"ExternalRepoAgent: {self.repo_dir}")
         self.model_name = model_name
-        self.max_concurrent_llm_queries = max_concurrent_llm_queries
+        self.max_concurrent_llm_queries = max_concurrent_llm_queries # TODO: assert that this value is sensible
         self.code_snippet_filename = utils.get_absolute_path(
             f"code_snippets_{self.repo_dir.replace('/', '').replace('.','')}.txt")
 
         def get_free_port():
+            # TODO: handle potential errors
             import socket
             sock = socket.socket()
             sock.bind(('', 0))
@@ -62,7 +67,7 @@ class ExternalRepoAgent():
         for _ in range(max_init_retry):
             self.port = get_free_port()
             self.logger.info(
-                f"Attempt to start an aider instance on port {self.port} with model {model_name}")
+                f"Attempt to start an aider instance on port {self.port} with model {model_name}.")
             self._process = subprocess.Popen(
                 f"exec init_aider_instance --port {self.port} --model-name {model_name}",
                 cwd=self.repo_dir,
@@ -70,17 +75,19 @@ class ExternalRepoAgent():
             ping_success = self.wait_for_ping()
             if ping_success:
                 self.logger.info(
-                    f"aider instance on port {self.port} returned ping, successful init")
+                    f"Aider instance on port {self.port} returned ping, successfully initialized.")
                 break
             else:
                 if self._process.poll() is None:
                     self._process.kill()
                 self.logger.warning(
-                    f"aider instance on port {self.port} killed, continue trying...")
+                    f"Attempt to start Aider instance on port {self.port} killed.")
         else:
             # Exhausted retries
+            self.logger.error(
+                f"Aider instance failed to initialize within {max_init_retry} tries, quitting.")
             raise InitExternalRepoAgentError(
-                f"Failed to initialize ExternalRepoAgent on {self.repo_dir}")
+                f"Failed to initialize ExternalRepoAgent on {self.repo_dir}.")
 
     def wait_for_ping(self) -> bool:
         """
@@ -88,16 +95,21 @@ class ExternalRepoAgent():
 
         :return: True if the agent responds with "pong", False if timeout is reached.
         """
-        timeout = 6
+        self.logger.info("Waiting for ping response.")
+        timeout = 6 # TODO: set as class variable
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
                 response = httpx.get(f"http://0.0.0.0:{self.port}/ping")
                 if response.json() == "pong":
+                    self.logger.info("Ping successful.")
                     return True
             except httpx.RequestError as e:
-                self.logger.warn(f"Ping request failed: {e}")
-            time.sleep(1)  # Wait for 0.5 seconds before retrying
+                self.logger.debug(f"Ping request failed: {e}")
+            # TODO: set as class variable
+            time.sleep(1)  # Wait for 1 second before retrying
+        self.logger.warning("Ping timeout reached.")
+        # raise TimeoutError
         return False
 
     def run(self, msg: str) -> str:
@@ -107,11 +119,14 @@ class ExternalRepoAgent():
         :param msg: The message to send.
         :return: The response from the agent.
         """
+        self.logger.info(f"Sending message: {msg}")
         response = httpx.post(
             f"http://0.0.0.0:{self.port}/msg",
             params={"msg": msg},
         )
-        return response.json()["result"]
+        result = response.json()["result"]
+        self.logger.debug(f"Received response: {result}")
+        return result
 
     async def run_stream(
             self, msg: str, chunk_size: int = 64) -> AsyncGenerator[str, None]:
@@ -122,16 +137,17 @@ class ExternalRepoAgent():
         :param chunk_size: The size of each chunk in the stream.
         :return: An async generator yielding parts of the response.
         """
+        self.logger.info(f"Sending message for streaming: {msg}")
         response = httpx.post(
             f"http://0.0.0.0:{self.port}/run_stream",
             params={"msg": msg},
             stream=True
         )
-        # return response.json()["result"]
         for partial_response in response.iter_content(
                 chunk_size=chunk_size, decode_unicode=True):
             if isinstance(partial_response, bytes):
                 partial_response = partial_response.decode('utf-8')
+            self.logger.debug(f"Received partial response: {partial_response}")
             yield partial_response
 
     async def ask(self, msg: str,
@@ -142,6 +158,7 @@ class ExternalRepoAgent():
         :param msg: The question to ask.
         :return: The response from the agent.
         """
+        self.logger.info(f"Asking question: {msg}")
         response = httpx.post(
             f"http://0.0.0.0:{self.port}/ask",
             params={"msg": msg},
@@ -151,6 +168,7 @@ class ExternalRepoAgent():
                 chunk_size=chunk_size, decode_unicode=True):
             if isinstance(partial_response, bytes):
                 partial_response = partial_response.decode('utf-8')
+            self.logger.debug(f"Received partial response: {partial_response}")
             yield partial_response
 
     def run_cmd(self, cmd: str) -> str:
@@ -160,37 +178,28 @@ class ExternalRepoAgent():
         :param cmd: The command to run.
         :return: The response from the agent.
         """
+        self.logger.info(f"Running command: {cmd}")
         response = httpx.post(
             f"http://0.0.0.0:{self.port}/msg",
             params={"msg": f"/run {cmd}"},
         )
-        return response.json()["result"]
-
-    def check_alive(self) -> str:
-        """
-        Check if the Aider agent process is alive.
-
-        :return: "alive" if the process is running, otherwise "dead".
-        """
-        poll = self._process.poll()
-        if poll is not None:
-            return "dead"
-
-        ping_response = httpx.get(
-            f"http://0.0.0.0:{self.port}/ping"
-        )
-        if ping_response == "pong":
-            return "alive"
-
-        return "dead"
+        result = response.json()["result"]
+        self.logger.info(f"Received command response: {result}")
+        return result
 
     def get_repo_map(self) -> str:
+        self.logger.info("Getting repository map")
         response = httpx.get(
             f"http://0.0.0.0:{self.port}/get_repo_map"
         )
-        return response.json()
+        repo_map = response.json()
+        self.logger.debug(f"Received repository map: {repo_map}")
+        return repo_map
 
     async def find_relevant_code(self, task):
+        self.logger.info(f"Finding relevant code for task: {task}")
+
+        # Delete existing code snippet file if it exists
         Path.unlink(Path(self.code_snippet_filename), missing_ok=True)
 
         # Step 1: Get list of relevant files
@@ -230,6 +239,7 @@ Please only provide the full path and return at most 5 files.
                      if (Path(self.repo_dir) / filename).is_file()]
         if len(filenames) == 0:
             # No real file names were generated, we should end early
+            self.logger.info("No relevant filenames found")
             return
 
         # Step 2: Get the relevant definitions
@@ -272,6 +282,7 @@ For each of the above files, look through the repository structure to suggest th
                        for filename in res if len(res[filename]) > 0}
         if len(useful_defs) == 0:
             # No useful defs found, we can stop early
+            self.logger.info("No useful definitions found")
             return
 
         # Step 3: Get the code snippets that were requested, and do one more round of checking if they are actually relevant
@@ -348,8 +359,14 @@ Task:
         with open(self.code_snippet_filename, 'w') as code_snippet_file:
             code_snippet_file.write(response)
 
+        self.logger.info("Relevant code snippets written to file")
+
         return
 
     def kill(self):
+        """
+        Kill the Aider agent process.
+        """
+        self.logger.info("Killing process")
         self._process.kill()
         return

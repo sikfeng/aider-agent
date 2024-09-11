@@ -57,7 +57,7 @@ class Agent:
         :return: The result of processing the message.
         """
         try:
-            result = self.coder.run("/code ", msg)
+            result = self.coder.run("/code " + msg)
             return str(result)
         except Exception as e:
             return f"error: failed due to {e}"
@@ -69,9 +69,17 @@ class Agent:
         :return: An async generator yielding parts of the response.
         """
         return self.coder.run_stream("/ask " + msg)
-    
+
     def get_repo_map(self) -> str:
-        return self.repo_map
+        # Hack to remove the repomap prefix
+        _tmp_prefix = self.coder.repo_map.repo_content_prefix
+        self.coder.repo_map.repo_content_prefix = None
+        repo_map = self.coder.get_repo_map()
+        self.coder.repo_map.repo_content_prefix = _tmp_prefix
+        return repo_map
+    
+    def reset(self) -> str:
+        return self.run("/reset")
 
 # Global agent instance
 agent: Agent = None

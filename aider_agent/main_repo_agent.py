@@ -2,6 +2,13 @@ from aider.coders import Coder
 from aider.models import Model
 from aider.io import InputOutput
 
+import litellm
+
+# Suppress debug information from litellm
+litellm.suppress_debug_info = True
+litellm.set_verbose = False
+litellm.drop_params = True
+
 # TODO: error handling
 
 class MainRepoAgent():
