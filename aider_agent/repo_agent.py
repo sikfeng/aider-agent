@@ -84,14 +84,14 @@ class BaseRepoAgent:
     def reset(self) -> str:
         return self.run("/reset")
 
-class Agent(BaseRepoAgent):
-    """A class to manage the Aider agent."""
+class ExternalRepoAgent(BaseRepoAgent):
+    """A class to manage the ExternalRepoAgent."""
 
     def __init__(
             self,
             llm_name: str = "azure/gpt-4o",
             map_tokens: int = 8092) -> None:
-        """Initialize the Agent.
+        """Initialize the ExternalRepoAgent.
 
         :param llm_name: The name of the model to use.
         :param map_tokens: Maximum number of tokens for the repo map.
@@ -101,15 +101,16 @@ class Agent(BaseRepoAgent):
 class MainRepoAgent(BaseRepoAgent):
     """A class to manage the Main Repo agent."""
 
-    def __init__(self, model_name: str = "azure/gpt-4o") -> None:
+    def __init__(self, model_name: str = "azure/gpt-4o", map_tokens: int = 1024) -> None:
         """Initialize the MainRepoAgent.
 
         :param model_name: The name of the model to use.
+        :param map_tokens: Maximum number of tokens for the repo map.
         """
         super().__init__(model_name=model_name)
 
 # Global agent instance
-agent: Agent = None
+agent: ExternalRepoAgent = None
 
 # send a message to aider
 @app.post("/msg")
@@ -186,7 +187,7 @@ def main() -> None:
     args = parser.parse_args()
 
     global agent
-    agent = Agent(llm_name=args.model_name, map_tokens=args.map_tokens)
+    agent = ExternalRepoAgent(llm_name=args.model_name, map_tokens=args.map_tokens)
 
     import uvicorn  # Import here to avoid unnecessary dependency if not running as main
     uvicorn.run(app, host="0.0.0.0", port=args.port)

@@ -15,7 +15,7 @@ dictConfig(log_config)
 
 from .repo_agent import MainRepoAgent
 from .planner_agent import PlannerAgent
-from .external_repo_agent import InitExternalRepoAgentError, ExternalRepoAgent
+from .external_repo_agent_handler import InitExternalRepoAgentError, ExternalRepoAgentHandler
 from . import utils
 
 import re
@@ -56,7 +56,7 @@ class Manager:
         """
         self.planner_agent: Optional[PlannerAgent] = None
         self.main_repo_agent: Optional[MainRepoAgent] = None
-        self.external_repo_agents: Dict[str, ExternalRepoAgent] = dict()
+        self.external_repo_agent_handlers: Dict[str, ExternalRepoAgentHandler] = dict()
         self.logger = logging.getLogger("AgentManager")
         self.model_name = model_name
         self.max_reflections = max_reflections
@@ -111,13 +111,13 @@ class Manager:
         if repo_dir == utils.get_absolute_path("."):
             self.logger.warning("Attempt to initialize ExternalRepoAgent on main repo, skipping.")
             return False
-        if repo_dir in self.external_repo_agents:
+        if repo_dir in self.external_repo_agent_handlers:
             self.logger.warning("Attempt to initialize a new ExternalRepoAgent on already initialized repo, skipping.")
             return False
 
         try:
-            agent = ExternalRepoAgent(model_name=model_name, repo_dir=repo_dir)
-            self.external_repo_agents[repo_dir] = agent
+            agent = ExternalRepoAgentHandler(model_name=model_name, repo_dir=repo_dir)
+            self.external_repo_agent_handlers[repo_dir] = agent
             self.logger.info(f"Successfully initialized an ExternalRepoAgent on {repo_dir}.")
             return True
         except InitExternalRepoAgentError as e:
@@ -186,10 +186,10 @@ class Manager:
         # even when external repo agents is empty
 
         self.logger.info(f"Starting to run {subtask}.")
-        self.logger.info(f"Querying ExternalRepoAgents.")
-        await asyncio.gather(*(external_repo_agent.find_relevant_code(subtask) for external_repo_agent in self.external_repo_agents.values()))
+        self.logger.info(f"Querying ExternalRepoAgentHandlers.")
+        await asyncio.gather(*(external_repo_agent.find_relevant_code(subtask) for external_repo_agent in self.external_repo_agent_handlers.values()))
 
-        for repo_path in self.external_repo_agents:
+        for repo_path in self.external_repo_agent_handlers:
             code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
             self.logger.info(f"Found {code_snippet_filename}.")
             try:
@@ -319,8 +319,8 @@ If you wish to edit a file, add the file to the chat.
 
         :return: A list of initialized Aider agents.
         """
-        self.logger.debug(f"ExternalRepoAgents: {self.external_repo_agents.keys}")
-        return list(self.external_repo_agents.keys())
+        self.logger.debug(f"ExternalRepoAgents: {self.external_repo_agent_handlers.keys}")
+        return list(self.external_repo_agent_handlers.keys())
 
     def shutdown(self) -> str:
         """
@@ -328,7 +328,7 @@ If you wish to edit a file, add the file to the chat.
 
         :return: "shutdown" after shutting down all agents.
         """
-        for repo_dir, external_repo_agent in self.external_repo_agents.items():
+        for repo_dir, external_repo_agent in self.external_repo_agent_handlers.items():
             self.logger.info(f"Killing ExternalRepoAgent on {repo_dir}.")
             external_repo_agent.kill()
         return "shutdown"

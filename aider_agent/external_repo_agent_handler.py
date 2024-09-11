@@ -14,7 +14,7 @@ class InitExternalRepoAgentError(RuntimeError):
     pass
 
 
-class ExternalRepoAgent():
+class ExternalRepoAgentHandler():
     """
     A class to manage an Aider instance initialized on another repository.
     """
