@@ -405,18 +405,6 @@ async def run_subtask(subtask: str) -> StreamingResponse:
     return StreamingResponse(manager.run_subtask(subtask))
 
 
-@app.get("/undo_last_subtask")
-def undo_last_subtask() -> str:
-    """
-    API endpoint to undo the last completed subtask.
-
-    :return: The result of the undo operation.
-    """
-    return manager.undo_last_subtask()
-
-# confirm run subtasks
-
-
 @app.post("/run_multiple_subtasks")
 async def run_multiple_Subtasks(subtasks: List[str]) -> StreamingResponse:
     """
@@ -426,6 +414,16 @@ async def run_multiple_Subtasks(subtasks: List[str]) -> StreamingResponse:
     :return: The list of responses from running the subtasks.
     """
     return StreamingResponse(manager.run_multiple_subtasks(subtasks))
+
+
+@app.get("/undo_last_subtask")
+def undo_last_subtask() -> str:
+    """
+    API endpoint to undo the last completed subtask.
+
+    :return: The result of the undo operation.
+    """
+    return manager.undo_last_subtask()
 
 
 @app.get("/shutdown")

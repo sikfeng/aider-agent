@@ -123,7 +123,7 @@ class ExternalRepoAgentHandler():
         """
         self.logger.info(f"Sending message: {msg}")
         response = httpx.post(
-            f"http://0.0.0.0:{self.port}/msg",
+            f"http://0.0.0.0:{self.port}/run",
             params={"msg": msg},
         )
         result = response.json()["result"]

@@ -122,8 +122,8 @@ agent: ExternalRepoAgent = None
 # send a message to aider
 
 
-@app.post("/msg")
-def send_msg(msg: str) -> dict:
+@app.post("/run")
+def run(msg: str) -> dict:
     """API endpoint to send a message to the agent.
 
     :param msg: The message to send.
