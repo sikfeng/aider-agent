@@ -17,10 +17,11 @@ The Aider Agent system is designed to manage multiple agents that can perform va
 ## Directory Structure
 
 - `aider_agent/`: Main directory containing the core functionalities.
-  - `aider_instance.py`: Manages the Aider agent.
-  - `code_search.py`: Handles code search functionalities.
+  - `external_repo_agent_handler.py`: Manages external repository agents.
+  - `logger.py`: Configures logging for the application.
   - `manager.py`: Manages the overall process and agents.
-  - `manager.py`: Manages the overall process and agents.
+  - `planner_agent.py`: Manages the Planner agent.
+  - `repo_agent.py`: Manages the Main and External Repo agents.
   - `test_stream.py`: Contains test functions for API endpoints.
   - `utils.py`: Utility functions for various tasks.
 
@@ -46,17 +47,19 @@ The Aider Agent system is designed to manage multiple agents that can perform va
 
 To run the main application, execute:
 ```sh
-python -m aider-agent.manager
+python -m aider_agent.manager
 ```
 
 ## API Endpoints
 
 The system provides several API endpoints for interacting with the agents:
 
-- **Aider Agent Endpoints**:
+- **Repo Agent Endpoints**:
+  - `POST /msg`: Sends a message to the agent.
   - `POST /run_stream`: Runs a stream with the given message.
   - `POST /ask`: Asks a question to the agent.
   - `GET /get_repo_map`: Retrieves the repository map.
+  - `GET /ping`: Pings the agent to check if it's alive.
 
 - **Manager Endpoints**:
   - `POST /init_external_repo_agent`: Initializes an external repository agent.
@@ -64,8 +67,6 @@ The system provides several API endpoints for interacting with the agents:
   - `POST /generate_subtasks`: Generates subtasks for a given objective.
   - `POST /finetune_subtasks`: Finetunes subtasks based on the given instruction.
   - `POST /run_subtask`: Runs a specified subtask.
+  - `POST /run_multiple_subtasks`: Confirms and runs a list of subtasks.
   - `GET /undo_last_subtask`: Undoes the last executed subtask.
-  - `POST /confirm_run_subtasks`: Confirms and runs a list of subtasks.
   - `GET /shutdown`: Shuts down the system.
-
-
