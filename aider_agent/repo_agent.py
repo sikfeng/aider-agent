@@ -119,9 +119,6 @@ class MainRepoAgent(BaseRepoAgent):
 # Global agent instance
 agent: ExternalRepoAgent = None
 
-# send a message to aider
-
-
 @app.post("/run")
 def run(msg: str) -> dict:
     """API endpoint to send a message to the agent.
@@ -132,9 +129,6 @@ def run(msg: str) -> dict:
     result = agent.run(msg)
     return {"result": result}
 
-# send a message to aider, but get stream
-
-
 @app.post("/run_stream")
 async def run_stream(msg: str) -> StreamingResponse:
     """API endpoint to send a message to the agent and get a streaming response.
@@ -143,9 +137,6 @@ async def run_stream(msg: str) -> StreamingResponse:
     :return: A StreamingResponse with the result of the message.
     """
     return StreamingResponse(agent.run_stream(msg))
-
-# ask aider
-
 
 @app.post("/ask")
 async def ask(msg: str) -> StreamingResponse:
