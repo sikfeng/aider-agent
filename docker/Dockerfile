@@ -1,7 +1,7 @@
 FROM python:3.10-slim AS base
 
 RUN apt-get update && \
-    apt-get install --no-install-recommends -y build-essential git libportaudio2 gnupg2 curl unzip && \
+    apt-get install --no-install-recommends -y build-essential git libportaudio2 gnupg2 && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
@@ -19,12 +19,7 @@ RUN chmod a+rwx /.aider /.cache
 #RUN git config --system --add safe.directory /workspace
 RUN git config --system --add safe.directory "*"
 
-#RUN git clone https://github.com/nus-apr/auto-code-rover.git
-#RUN mv auto-code-rover /opt/
-#RUN /venv/bin/python -m pip install --no-cache-dir -r /opt/auto-code-rover/requirements.txt
-#ENV PATH="$PATH:/opt/auto-code-rover/"
-
-ARG AIDER_VERSION=0.54.12
+ARG AIDER_VERSION=0.55.0
 
 FROM base AS aider
 
@@ -38,9 +33,6 @@ RUN /venv/bin/python -m pip install --no-cache-dir aider-chat[help,browser,playw
 RUN playwright install --with-deps chromium
 
 FROM aider AS aider-agent
-
-#COPY . /tmp/aider-agent
-#RUN /venv/bin/python -m pip install --no-cache-dir /tmp/aider-agent
 
 COPY requirements.txt /tmp
 RUN /venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements.txt
