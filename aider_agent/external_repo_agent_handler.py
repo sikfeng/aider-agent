@@ -207,8 +207,10 @@ class ExternalRepoAgentHandler():
 
         # Step 1: Get list of relevant files
         repo_map = self.get_repo_map()
-        system_prompt = ExternalRepoAgentHandlerPrompts.SYSTEM_PROMPT_FIND_RELEVANT_FILENAMES.format(repo_map=repo_map)
-        user_prompt = ExternalRepoAgentHandlerPrompts.USER_PROMPT_FIND_RELEVANT_FILENAMES.format(task=task)
+        system_prompt = ExternalRepoAgentHandlerPrompts.SYSTEM_PROMPT_FIND_RELEVANT_FILENAMES.format(
+            repo_map=repo_map)
+        user_prompt = ExternalRepoAgentHandlerPrompts.USER_PROMPT_FIND_RELEVANT_FILENAMES.format(
+            task=task)
 
         res = strict_json(
             system_prompt=system_prompt,
@@ -228,8 +230,10 @@ class ExternalRepoAgentHandler():
             return
 
         # Step 2: Get the relevant definitions
-        system_prompt = ExternalRepoAgentHandlerPrompts.SYSTEM_PROMPT_FIND_RELEVANT_DEFINITIONS.format(repo_map=repo_map)
-        user_prompt = ExternalRepoAgentHandlerPrompts.USER_PROMPT_FIND_RELEVANT_DEFINITIONS.format(task=task, filenames=", ".join(f"`{filename}`" for filename in filenames))
+        system_prompt = ExternalRepoAgentHandlerPrompts.SYSTEM_PROMPT_FIND_RELEVANT_DEFINITIONS.format(
+            repo_map=repo_map)
+        user_prompt = ExternalRepoAgentHandlerPrompts.USER_PROMPT_FIND_RELEVANT_DEFINITIONS.format(
+            task=task, filenames=", ".join(f"`{filename}`" for filename in filenames))
 
         res = strict_json(
             system_prompt=system_prompt,

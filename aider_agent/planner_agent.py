@@ -57,8 +57,10 @@ class PlannerAgent:
             return None
 
         # Ask the LLM what questions to ask using strictjson
-        system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_GET_QUESTIONS.format(repo_map=repo_map, max_questions=self.max_questions)
-        user_prompt = PlannerAgentPrompts.USER_PROMPT_GET_QUESTIONS.format(objective=objective)
+        system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_GET_QUESTIONS.format(
+            repo_map=repo_map, max_questions=self.max_questions)
+        user_prompt = PlannerAgentPrompts.USER_PROMPT_GET_QUESTIONS.format(
+            objective=objective)
         questions_response = strict_json(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -72,7 +74,8 @@ class PlannerAgent:
 
         async def ask_aider(question: str) -> str:
             main_repo_agent = MainRepoAgent(model_name=self.model_name)
-            query_message = PlannerAgentPrompts.AIDER_QUERY_QUESTION.format(question=question)
+            query_message = PlannerAgentPrompts.AIDER_QUERY_QUESTION.format(
+                question=question)
             response = ""
             for _ in range(self.max_reflections):
                 curr_response = ""
@@ -142,9 +145,11 @@ Restate the following as an instruction for a software developer
         # Gather necessary information
         gathered_info_summary = await self.gather_information(objective)
         if gathered_info_summary is None:
-            system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_GENERATE_SUBTASKS_NO_GATHERED_INFO.format(max_subtasks=self.max_subtasks, gathered_info_summary=gathered_info_summary)
+            system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_GENERATE_SUBTASKS_NO_GATHERED_INFO.format(
+                max_subtasks=self.max_subtasks, gathered_info_summary=gathered_info_summary)
         else:
-            system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_GENERATE_SUBTASKS.format(max_subtasks=self.max_subtasks, gathered_info_summary=gathered_info_summary)
+            system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_GENERATE_SUBTASKS.format(
+                max_subtasks=self.max_subtasks, gathered_info_summary=gathered_info_summary)
 
         res = strict_json(
             system_prompt=system_prompt,

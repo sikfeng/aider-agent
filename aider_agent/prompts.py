@@ -63,9 +63,10 @@ You are a software engineer.
 Given the list of questions and answers asked, extract the key points from the answers.
 """
 
-    USER_PROMPT_SUMMARIZE_GATHERED_INFO = """                                                                                                                                                                                                                     
-{formatted_gathered_info}                                                                                                                                                                                                                    
+    USER_PROMPT_SUMMARIZE_GATHERED_INFO = """
+{formatted_gathered_info}
 """
+
 
 class ExternalRepoAgentHandlerPrompts:
     SYSTEM_PROMPT_FIND_RELEVANT_FILENAMES = """
