@@ -52,21 +52,66 @@ python -m aider_agent.manager
 
 ## API Endpoints
 
-The system provides several API endpoints for interacting with the agents:
+The system provides several WebSocket methods for interacting with the agents:
 
-- **Repo Agent Endpoints**:
+- **Repo Agent Methods**:
   - `POST /msg`: Sends a message to the agent.
+    - **Params**: 
+      - `msg` (str): The message to send.
   - `POST /run_stream`: Runs a stream with the given message.
+    - **Params**: 
+      - `msg` (str): The message to run in the stream.
   - `POST /ask`: Asks a question to the agent.
+    - **Params**: 
+      - `msg` (str): The question to ask.
   - `GET /get_repo_map`: Retrieves the repository map.
   - `GET /ping`: Pings the agent to check if it's alive.
 
-- **Manager Endpoints**:
-  - `POST /init_external_repo_agent`: Initializes an external repository agent.
-  - `GET /get_external_repo_agents`: Retrieves a list of external repository agents.
-  - `POST /generate_subtasks`: Generates subtasks for a given objective.
-  - `POST /finetune_subtasks`: Finetunes subtasks based on the given instruction.
-  - `POST /run_subtask`: Runs a specified subtask.
-  - `POST /run_multiple_subtasks`: Confirms and runs a list of subtasks.
-  - `GET /undo_last_subtask`: Undoes the last executed subtask.
-  - `GET /shutdown`: Shuts down the system.
+- **Manager Methods** (WebSocket endpoint: `/ws`):
+  - `init_external_repo_agent`: Initializes an external repository agent.
+    - **Params**: 
+      - `repo_dir` (str): The directory of the repository.
+  - `get_external_repo_agents`: Retrieves a list of external repository agents.
+  - `generate_subtasks`: Generates subtasks for a given objective.
+    - **Params**: 
+      - `objective` (str): The main objective.
+  - `finetune_subtasks`: Finetunes subtasks based on the given instruction.
+    - **Params**: 
+      - `objective` (str): The main objective.
+      - `instruction` (str): Additional instructions for finetuning.
+  - `run_subtask`: Runs a specified subtask.
+    - **Params**: 
+      - `subtask` (str): The subtask to run.
+  - `run_multiple_subtasks`: Confirms and runs a list of subtasks.
+    - **Params**: 
+      - `subtasks` (List[str]): The list of subtasks to run.
+  - `undo_last_subtask`: Undoes the last executed subtask.
+  - `shutdown`: Shuts down the system.
+
+### WebSocket Data Format
+
+For each WebSocket method, the data should be sent in the following JSON format:
+
+```json
+{
+  "method": "<method_name>",
+  "params": {
+    "<param1>": "<value1>",
+    "<param2>": "<value2>",
+    ...
+  }
+}
+```
+
+#### Example
+
+To initialize an external repository agent, the data format would be:
+
+```json
+{
+  "method": "init_external_repo_agent",
+  "params": {
+    "repo_dir": "/path/to/repo"
+  }
+}
+```

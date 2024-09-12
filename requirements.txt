@@ -5,3 +5,4 @@ uvicorn
 litellm>=1.43.19
 strictjson
 aider-chat
+websockets

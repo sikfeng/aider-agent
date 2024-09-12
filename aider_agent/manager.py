@@ -22,6 +22,9 @@ from fastapi.responses import StreamingResponse
 from fastapi import FastAPI
 from strictjson import *
 from typing import AsyncGenerator, List, Dict, Optional
+
+from fastapi import WebSocket, WebSocketDisconnect
+
 import re
 from . import utils
 from .external_repo_agent_handler import InitExternalRepoAgentError, ExternalRepoAgentHandler
@@ -138,8 +141,8 @@ class Manager:
             self.main_repo_agent = MainRepoAgent(model_name=model_name)
             self.logger.info("MainRepoAgent successfully initialized.")
             return True
-        except BaseException:
-            self.logger.error("MainRepoAgent failed to initialize.")
+        except BaseException as e:
+            self.logger.error("MainRepoAgent failed to initialize: %s", str(e))
             return False
 
     def init_planner_agent(self, model_name: str = "azure/gpt-4o") -> bool:
@@ -340,101 +343,88 @@ If you wish to edit a file, add the file to the chat.
 
 manager = None
 
-@app.post("/init_external_repo_agent")
-async def init_external_repo_agent(repo_dir: str) -> str:
-    """
-    API endpoint to initialize an Aider agent.
+logger = logging.getLogger("WebSocketEndpoint")
 
-    :param repo_dir: The directory of the repository.
-    :return: The result of the initialization.
-    """
-    result = manager.init_external_repo_agent(repo_dir)
-    if result:
-        return "Success"
-    else:
-        return "Failure"
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    logger.info("WebSocket connection accepted")
+    try:
+        async def send_keepalive_pings():
+            while True:
+                await asyncio.sleep(10)  # Adjust the interval as needed
+                await websocket.send_json({"ping": "keepalive"})
+                logger.debug("Sent keepalive ping")
 
+        keepalive_task = asyncio.create_task(send_keepalive_pings())
 
-@app.get("/get_external_repo_agents")
-async def get_external_repo_agents() -> List[str]:
-    """
-    API endpoint to get a list of all initialized Aider agents.
+        while True:
+            data = await websocket.receive_json()
+            logger.info(f"Received data: {data}")
+            method = data.get("method")
+            params = data.get("params", {})
 
-    :return: The result containing the list of agents.
-    """
-    return manager.get_external_repo_agents()
+            if method == "init_external_repo_agent":
+                repo_dir = params.get("repo_dir")
+                result = manager.init_external_repo_agent(repo_dir)
+                await websocket.send_json({"result": "Success" if result else "Failure"})
+                await websocket.send_json({"result": "</eos_token>"})
+                logger.info(f"init_external_repo_agent result: {'Success' if result else 'Failure'}")
 
-# generate subtasks
+            elif method == "get_external_repo_agents":
+                agents = str(manager.get_external_repo_agents())
+                await websocket.send_json({"result": agents})
+                await websocket.send_json({"result": "</eos_token>"})
+                logger.info(f"get_external_repo_agents result: {agents}")
 
+            elif method == "generate_subtasks":
+                objective = params.get("objective")
+                import json
+                subtasks = json.dumps(await manager.generate_subtasks(objective))
+                await websocket.send_json({"result": subtasks})
+                await websocket.send_json({"result": "</eos_token>"})
+                logger.info(f"generate_subtasks result: {subtasks}")
 
-@app.post("/generate_subtasks")
-async def generate_subtasks(objective: str) -> List[str]:
-    """
-    API endpoint to generate subtasks for a given objective.
+            elif method == "finetune_subtasks":
+                objective = params.get("objective")
+                instruction = params.get("instruction")
+                subtasks = manager.finetune_subtasks(objective, instruction)
+                await websocket.send_json({"result": subtasks})
+                await websocket.send_json({"result": "</eos_token>"})
+                logger.info(f"finetune_subtasks result: {subtasks}")
 
-    :param objective: The main objective.
-    :return: The list of generated subtasks.
-    """
-    return await manager.generate_subtasks(objective)
+            elif method == "run_subtask":
+                subtask = params.get("subtask")
+                async for response in manager.run_subtask(subtask):
+                    await websocket.send_json({"result": response})
+                    logger.info(f"run_subtask response: {response}")
+                await websocket.send_json({"result": "</eos_token>"})
 
-# finetune subtasks
+            elif method == "run_multiple_subtasks":
+                subtasks = params.get("subtasks")
+                async for response in manager.run_multiple_subtasks(subtasks):
+                    await websocket.send_json({"result": response})
+                    logger.info(f"run_multiple_subtasks response: {response}")
+                await websocket.send_json({"result": "</eos_token>"})
 
+            elif method == "undo_last_subtask":
+                result = manager.undo_last_subtask()
+                await websocket.send_json({"result": "Success" if result else "Failure"})
+                await websocket.send_json({"result": "</eos_token>"})
+                logger.info(f"undo_last_subtask result: {'Success' if result else 'Failure'}")
 
-@app.post("/finetune_subtasks")
-async def finetune_subtasks(objective: str, instruction: str) -> List[str]:
-    """
-    API endpoint to finetune the generated subtasks based on additional instructions.
+            elif method == "shutdown":
+                manager.shutdown()
+                await websocket.send_json({"result": "shutdown"})
+                await websocket.send_json({"result": "</eos_token>"})
+                logger.info("Shutdown initiated")
+                os.kill(os.getpid(), signal.SIGTERM)
 
-    :param objective: The main objective.
-    :param instruction: Additional instructions for finetuning.
-    :return: The result of the finetuning.
-    """
-    return manager.finetune_subtasks(objective, instruction)
-
-
-@app.post("/run_subtask")
-async def run_subtask(subtask: str) -> StreamingResponse:
-    """
-    API endpoint to run a subtask.
-
-    :param subtask: The subtask to run.
-    :return: The result of running the subtask.
-    """
-    return StreamingResponse(manager.run_subtask(subtask))
-
-
-@app.post("/run_multiple_subtasks")
-async def run_multiple_Subtasks(subtasks: List[str]) -> StreamingResponse:
-    """
-    API endpoint to confirm and run the generated subtasks.
-
-    :param subtasks: The list of subtasks to run.
-    :return: The list of responses from running the subtasks.
-    """
-    return StreamingResponse(manager.run_multiple_subtasks(subtasks))
-
-
-@app.get("/undo_last_subtask")
-def undo_last_subtask() -> str:
-    """
-    API endpoint to undo the last completed subtask.
-
-    :return: The result of the undo operation.
-    """
-    return manager.undo_last_subtask()
-
-
-@app.get("/shutdown")
-def shutdown() -> str:
-    """
-    API endpoint to shutdown all external repo agents.
-
-    :return: "shutdown" after shutting down all agents.
-    """
-    manager.shutdown()
-    os.kill(os.getpid(), signal.SIGTERM)
-    return "shutdown"
-
+    except WebSocketDisconnect:
+        logger.warning("Client disconnected")
+    finally:
+        keepalive_task.cancel()
+        logger.info("Keepalive task cancelled")
 
 def main() -> None:
     """
