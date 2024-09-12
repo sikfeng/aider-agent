@@ -6,6 +6,7 @@ import asyncio
 from pathlib import Path
 from typing import AsyncGenerator
 from . import utils
+from .prompts import ExternalRepoAgentHandlerPrompts
 
 from strictjson import *
 
@@ -205,31 +206,13 @@ class ExternalRepoAgentHandler():
         Path.unlink(Path(self.code_snippet_filename), missing_ok=True)
 
         # Step 1: Get list of relevant files
-        system_msg = """
-You are a software developer maintaining a project.
-You are providing code snippets to a user who is working on a different project.
-The user will integrate the code snippets into their project to achieve a task.
-
-Here are summaries of some files present in your project.
-
-{repo_map}
-        """
         repo_map = self.get_repo_map()
-        system_msg = system_msg.format(repo_map=repo_map)
-
-        user_msg = """
-Please look through the repository structure and suggest a list of files that is relevant to the following task.
-
-{task}
-
-Please only provide the full path and return at most 5 files.
-"""
-
-        user_msg = user_msg.format(task=task)
+        system_prompt = ExternalRepoAgentHandlerPrompts.SYSTEM_PROMPT_FIND_RELEVANT_FILENAMES.format(repo_map=repo_map)
+        user_prompt = ExternalRepoAgentHandlerPrompts.USER_PROMPT_FIND_RELEVANT_FILENAMES.format(task=task)
 
         res = strict_json(
-            system_prompt=system_msg,
-            user_prompt=user_msg,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             output_format={
                 'filenames': "Array of filenames which contain relevant for completing the user's task, type: Array[str]"
             },
@@ -245,35 +228,12 @@ Please only provide the full path and return at most 5 files.
             return
 
         # Step 2: Get the relevant definitions
-        system_msg = """
-You are a software developer maintaining a project.
-You are providing code snippets to a user who is working on a different project.
-The user will integrate the code snippets into their project to achieve a task.
-
-Here are summaries of some files present in your project.
-
-{repo_map}
-"""
-        system_msg = system_msg.format(repo_map=repo_map)
-
-        user_msg = """
-Here are the files which the contain relevant code snippets.
-
-{filenames}
-
-For each of the above files, look through the repository structure to suggest the relevant class or functions that can be used for the following task.
-
-{task}
-"""
-
-        task = "Create a new command in the package.json file that will trigger the webview."
-        user_msg = user_msg.format(
-            task=task, filenames=", ".join(
-                f"`{filename}`" for filename in filenames))
+        system_prompt = ExternalRepoAgentHandlerPrompts.SYSTEM_PROMPT_FIND_RELEVANT_DEFINITIONS.format(repo_map=repo_map)
+        user_prompt = ExternalRepoAgentHandlerPrompts.USER_PROMPT_FIND_RELEVANT_DEFINITIONS.format(task=task, filenames=", ".join(f"`{filename}`" for filename in filenames))
 
         res = strict_json(
-            system_prompt=system_msg,
-            user_prompt=user_msg,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
             output_format={
                 filename: f"Array of relevant class and method names in {filename}, type: Array[str]" for filename in filenames
             },
@@ -287,47 +247,32 @@ For each of the above files, look through the repository structure to suggest th
             self.logger.info("No useful definitions found")
             return
 
+        # TODO: consider using static analysis to extract the codes instead
         # Step 3: Get the code snippets that were requested, and do one more round of checking if they are actually relevant
         # Create a semaphore to limit concurrent queries
         semaphore = asyncio.Semaphore(self.max_concurrent_llm_queries)
 
         async def process_file(filename, semaphore):
             async with semaphore:
-                system_msg = """
-You are a software developer maintaining a project.
-You are providing code snippets to a user who is working on a different project.
-The user will integrate the code snippets into their project to achieve a task.
-
-Here are the contents of {filename}:
-
-```
-{file_contents}
-```
-"""
+                system_prompt = ""
                 with open(Path(self.repo_dir) / filename) as f:
                     file_contents = f.read()
-                    system_msg = system_msg.format(
+                    system_prompt = ExternalRepoAgentHandlerPrompts.SYSTEM_PROMPT_PROCESS_FILE.format(
                         filename=filename, file_contents=file_contents)
 
-                user_msg = """
-For the following class, method and function names, extract their code from the file contents.
-Also, determine if the code snippet will be useful, and if so explanation of why they are useful for the task.
+                user_prompt = ExternalRepoAgentHandlerPrompts.USER_PROMPT_PROCESS_FILE.format(
+                    definitions=", ".join(f"`{def_name}`" for def_name in useful_defs[filename]),
+                    task=task
+                )
 
-Class/Method/Function names:
-{definitions}
-
-Task:
-{task}
-"""
-
-                user_msg = user_msg.format(
+                user_prompt = user_prompt.format(
                     definitions=", ".join(
                         f"`{def_name}`" for def_name in useful_defs[filename]),
                     task=task)
 
                 res = await strict_json_async(
-                    system_prompt=system_msg,
-                    user_prompt=user_msg,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
                     output_format={
                         def_name: {
                             "code": f"code for `{def_name}`, type: code",

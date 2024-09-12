@@ -4,6 +4,7 @@ import logging
 import asyncio
 from strictjson import strict_json
 from . import utils
+from .prompts import PlannerAgentPrompts
 
 
 class PlannerAgent:
@@ -56,27 +57,8 @@ class PlannerAgent:
             return None
 
         # Ask the LLM what questions to ask using strictjson
-        system_prompt = """
-You are a software engineer gathering information to complete a task. However, you suspect that some functionality has already been implemented, which you can reuse.
-
-Here is a summary of the repository:
-{repo_map}
-
-There is another software developer which understands the codebase which you will work on.
-
-You will ask questions to find out how you can reuse existing functionality to complete your task.
-You should consider the subtasks which you will have to implement, and ask the developer questions relating to those subtasks.
-Ask at most {max_questions}.
-Each question should be clear and specific to the task and codebase you are working on.
-"""
-        system_prompt = system_prompt.format(
-            repo_map=repo_map, max_questions=self.max_questions)
-        user_prompt = """
-This is the objective to be completed: {objective}
-"""
-        user_prompt = user_prompt.format(
-            max_questions=self.max_questions,
-            objective=objective)
+        system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_GET_QUESTIONS.format(repo_map=repo_map, max_questions=self.max_questions)
+        user_prompt = PlannerAgentPrompts.USER_PROMPT_GET_QUESTIONS.format(objective=objective)
         questions_response = strict_json(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -90,15 +72,8 @@ This is the objective to be completed: {objective}
 
         async def ask_aider(question: str) -> str:
             main_repo_agent = MainRepoAgent(model_name=self.model_name)
-            query_message = f"""Answer the following question: {question}
-
-Do NOT write any code for implementing any features.
-Only respond in natural language.
-Only respond with information about the current codebase.
-Respond with a high level overview of what has already been implemented, and what is missing.
-"""
+            query_message = PlannerAgentPrompts.AIDER_QUERY_QUESTION.format(question=question)
             response = ""
-            # TODO: make the max reflections a class variable
             for _ in range(self.max_reflections):
                 curr_response = ""
                 for response_chunk in main_repo_agent.ask(query_message):
@@ -138,15 +113,13 @@ Respond with a high level overview of what has already been implemented, and wha
         self.logger.info("Gathered Information: %s", formatted_gathered_info)
 
         # Summarize the gathered information
-        summary_prompt = """
-{formatted_gathered_info}
-"""
-        summary_prompt = summary_prompt.format(
+        system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_SUMMARIZE_GATHERED_INFO
+        user_prompt = PlannerAgentPrompts.USER_PROMPT_SUMMARIZE_GATHERED_INFO.format(
             formatted_gathered_info=formatted_gathered_info)
         summary_response = utils.llm(
             self.model_name)(
-            system_prompt="""You are a software engineer. Given the list of questions and answers asked, extract the key points from the answers""",
-            user_prompt=f"{formatted_gathered_info}")
+            system_prompt=system_prompt,
+            user_prompt=user_prompt)
         self.logger.info("Summary: %s", summary_response)
         return summary_response
 
@@ -158,55 +131,23 @@ Respond with a high level overview of what has already been implemented, and wha
         :return: A list of subtasks.
         """
         '''# Restate the problem statement
-        system_msg = """You are a requirements analyst.
+        system_prompt = """You are a requirements analyst.
 Restate the following as an instruction for a software developer
 """
-        user_msg = objective
+        user_prompt = objective
         objective = utils.llm(self.model_name)(
-            system_prompt=system_msg, user_prompt=user_msg
+            system_prompt=system_prompt, user_prompt=user_prompt
         )'''
 
         # Gather necessary information
         gathered_info_summary = await self.gather_information(objective)
         if gathered_info_summary is None:
-            system_msg = """You're a software engineer AI.
-Your job is to plan a maximum of {max_subtasks} tasks to complete the provided objective.
-The primary goal is to create a functional Minimum Viable Product (MVP) as quickly as possible.
-These tasks will be given to a new intern developer, hence ensure each task has a clear description.
-
-Each task should be a discrete, actionable step that contributes to the overall objective.
-Do not waste time on uneccessary or redundant steps.
-Don't create needless tasks like "document the findings".
-Do not enumerate the tasks.
-
-Do not implement functionality that the user did not ask for.
-Do not plan tasks for building, testing, or deploying.
-"""
+            system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_GENERATE_SUBTASKS_NO_GATHERED_INFO.format(max_subtasks=self.max_subtasks, gathered_info_summary=gathered_info_summary)
         else:
-            system_msg = """You're a software engineer AI.
-Your job is to plan a maximum of {max_subtasks} tasks to complete the provided objective.
-The primary goal is to create a functional Minimum Viable Product (MVP) as quickly as possible.
-These tasks will be given to a new intern developer, hence ensure each task has a clear description.
-
-Each task should be a discrete, actionable step that contributes to the overall objective.
-Do not waste time on uneccessary or redundant steps.
-Don't create needless tasks like "document the findings".
-Do not enumerate the tasks.
-
-Here is a summary of the current codebase, which you should use to plan.
-{gathered_info}
-
-Do not implement functionality that the user did not ask for, or is already implemented.
-Do not plan tasks for building, testing, or deploying.
-    """
-
-        system_msg = system_msg.format(
-            max_subtasks=self.max_subtasks,
-            gathered_info=gathered_info_summary)
-        # print(system_msg)
+            system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_GENERATE_SUBTASKS.format(max_subtasks=self.max_subtasks, gathered_info_summary=gathered_info_summary)
 
         res = strict_json(
-            system_prompt=system_msg,
+            system_prompt=system_prompt,
             user_prompt=f"Objective: {objective}",
             output_format={'Plan': 'Array of subtasks, type: Array[str]'},
             llm=utils.llm(self.model_name)
