@@ -74,7 +74,10 @@ class BaseRepoAgent:
         """
         return self.coder.run_stream("/ask " + msg)
 
-    def get_repo_map(self) -> str:
+    def reset(self) -> str:
+        return self.run("/reset")
+
+    def _get_repo_map(self) -> str:
         # Hack to remove the repomap prefix
         _tmp_prefix = self.coder.repo_map.repo_content_prefix
         self.coder.repo_map.repo_content_prefix = None
@@ -82,8 +85,8 @@ class BaseRepoAgent:
         self.coder.repo_map.repo_content_prefix = _tmp_prefix
         return repo_map
 
-    def reset(self) -> str:
-        return self.run("/reset")
+    def get_repo_map(self) -> str:
+        raise NotImplementedError
 
 
 class ExternalRepoAgent(BaseRepoAgent):
@@ -91,18 +94,24 @@ class ExternalRepoAgent(BaseRepoAgent):
 
     def __init__(
             self,
-            llm_name: str = "azure/gpt-4o",
+            model_name: str = "azure/gpt-4o",
             map_tokens: int = 8092) -> None:
         """Initialize the ExternalRepoAgent.
 
-        :param llm_name: The name of the model to use.
+        :param modemodelame: The name of the model to use.
         :param map_tokens: Maximum number of tokens for the repo map.
         """
-        super().__init__(model_name=llm_name, map_tokens=map_tokens)
+        super().__init__(model_name=model_name, map_tokens=map_tokens)
 
+        self.repo_map = self._get_repo_map()
+
+    def get_repo_map(self) -> str:
+        # Expecting that external repo will not be modified
+        # Hence we simply store the repo_map and just retrieve it.
+        return self.repo_map
 
 class MainRepoAgent(BaseRepoAgent):
-    """A class to manage the Main Repo agent."""
+    """A class to manage the MainRepoAgent."""
 
     def __init__(
             self,
@@ -113,7 +122,12 @@ class MainRepoAgent(BaseRepoAgent):
         :param model_name: The name of the model to use.
         :param map_tokens: Maximum number of tokens for the repo map.
         """
-        super().__init__(model_name=model_name)
+        super().__init__(model_name=model_name, map_tokens=map_tokens)
+
+    def get_repo_map(self) -> str:
+        # Expected that the main repo will keep updating
+        repo_map = self._get_repo_map()
+        return repo_map
 
 
 # Global agent instance
@@ -198,7 +212,7 @@ def main() -> None:
 
     global agent
     agent = ExternalRepoAgent(
-        llm_name=args.model_name,
+        model_name=args.model_name,
         map_tokens=args.map_tokens)
 
     import uvicorn  # Import here to avoid unnecessary dependency if not running as main
