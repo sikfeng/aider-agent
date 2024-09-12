@@ -28,8 +28,7 @@ from .external_repo_agent_handler import InitExternalRepoAgentError, ExternalRep
 from .planner_agent import PlannerAgent
 from .repo_agent import MainRepoAgent
 from logging.config import dictConfig
-from .logger import log_config
-dictConfig(log_config)
+from .logger import LOG_CONFIG
 
 
 litellm.suppress_debug_info = True
@@ -339,8 +338,7 @@ If you wish to edit a file, add the file to the chat.
         return "shutdown"
 
 
-manager = Manager()
-
+manager = None
 
 @app.post("/init_external_repo_agent")
 async def init_external_repo_agent(repo_dir: str) -> str:
@@ -444,13 +442,19 @@ def main() -> None:
     """
     parser = argparse.ArgumentParser(
         description="Run the Aider agent manager.")
-    parser.add_argument(
-        '--port',
-        type=int,
-        help='Port of the agent',
-        default=10000)
+    parser.add_argument('--port', type=int, help='Port of the agent', default=10000)
+    parser.add_argument('--logname', type=str, help='Path to logfile', default="/tmp/manager.log")
     args = parser.parse_args()
 
+    LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(args.logname)
+    if Path(LOG_CONFIG['handlers']['fileHandler']['filename']).is_file():
+        # TODO: ask for user confirmation to overwrite logfile
+        # for now I will just overwrite it anyways
+        Path(LOG_CONFIG['handlers']['fileHandler']['filename']).unlink()
+    dictConfig(LOG_CONFIG)
+
+    global manager
+    manager = Manager()
     import uvicorn  # Import Uvicorn for running the FastAPI app
     uvicorn.run(app, host="0.0.0.0", port=args.port)
 
