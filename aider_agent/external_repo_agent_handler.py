@@ -9,6 +9,7 @@ from . import utils
 from .prompts import ExternalRepoAgentHandlerPrompts
 
 from strictjson import *
+import litellm
 
 
 class InitExternalRepoAgentError(RuntimeError):
@@ -72,7 +73,7 @@ class ExternalRepoAgentHandler():
             self.logger.info(
                 f"Attempt to start an aider instance on port {self.port} with model {model_name}.")
             self._process = subprocess.Popen(
-                f"exec init_aider_instance --port {self.port} --model-name {model_name}",
+                f"exec init_repo_agent --port {self.port} --model-name {model_name}",
                 cwd=self.repo_dir,
                 shell=True)
             ping_success = self.wait_for_ping()
@@ -212,7 +213,7 @@ class ExternalRepoAgentHandler():
         user_prompt = ExternalRepoAgentHandlerPrompts.USER_PROMPT_FIND_RELEVANT_FILENAMES.format(
             task=task)
 
-        res = strict_json(
+        res = await utils.strict_json_retry(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             output_format={
@@ -235,7 +236,7 @@ class ExternalRepoAgentHandler():
         user_prompt = ExternalRepoAgentHandlerPrompts.USER_PROMPT_FIND_RELEVANT_DEFINITIONS.format(
             task=task, filenames=", ".join(f"`{filename}`" for filename in filenames))
 
-        res = strict_json(
+        res = await utils.strict_json_retry(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             output_format={
@@ -274,7 +275,7 @@ class ExternalRepoAgentHandler():
                         f"`{def_name}`" for def_name in useful_defs[filename]),
                     task=task)
 
-                res = await strict_json_async(
+                res = await utils.strict_json_async_retry(
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
                     output_format={

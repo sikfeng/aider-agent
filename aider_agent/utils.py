@@ -1,6 +1,8 @@
 from functools import partial
-
 from pathlib import Path
+import asyncio
+
+from strictjson import *
 
 import litellm
 from litellm import acompletion, completion
@@ -84,3 +86,51 @@ async def _llm_async(
         ]
     )
     return response.choices[0].message.content
+
+async def strict_json_retry(system_prompt: str, user_prompt: str, output_format: dict, llm, max_retries: int = 5, retry_delay: int = 10) -> dict:
+    """
+    Call strict_json with retries on RateLimitError.
+
+    :param system_prompt: The system prompt.
+    :param user_prompt: The user prompt.
+    :param output_format: The expected output format.
+    :param llm: The LLM to use.
+    :param max_retries: Maximum number of retries.
+    :param retry_delay: Delay between retries in seconds.
+    :return: The response from strict_json.
+    """
+    for _ in range(max_retries):
+        try:
+            return strict_json(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                output_format=output_format,
+                llm=llm
+            )
+        except litellm.exceptions.RateLimitError:
+            await asyncio.sleep(retry_delay)
+    raise RuntimeError("Max retries exceeded for strict_json")
+
+async def strict_json_async_retry(system_prompt: str, user_prompt: str, output_format: dict, llm, max_retries: int = 5, retry_delay: int = 10) -> dict:
+    """
+    Call strict_json with retries on RateLimitError.
+
+    :param system_prompt: The system prompt.
+    :param user_prompt: The user prompt.
+    :param output_format: The expected output format.
+    :param llm: The LLM to use.
+    :param max_retries: Maximum number of retries.
+    :param retry_delay: Delay between retries in seconds.
+    :return: The response from strict_json.
+    """
+    for _ in range(max_retries):
+        try:
+            return await strict_json_async(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                output_format=output_format,
+                llm=llm
+            )
+        except litellm.exceptions.RateLimitError:
+            await asyncio.sleep(retry_delay)
+    raise RuntimeError("Max retries exceeded for strict_json_async")
