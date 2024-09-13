@@ -87,7 +87,14 @@ async def _llm_async(
     )
     return response.choices[0].message.content
 
-async def strict_json_retry(system_prompt: str, user_prompt: str, output_format: dict, llm, max_retries: int = 5, retry_delay: int = 10) -> dict:
+
+async def strict_json_retry(
+        system_prompt: str,
+        user_prompt: str,
+        output_format: dict,
+        llm,
+        max_retries: int = 5,
+        retry_delay: int = 10) -> dict:
     """
     Call strict_json with retries on RateLimitError.
 
@@ -111,7 +118,14 @@ async def strict_json_retry(system_prompt: str, user_prompt: str, output_format:
             await asyncio.sleep(retry_delay)
     raise RuntimeError("Max retries exceeded for strict_json")
 
-async def strict_json_async_retry(system_prompt: str, user_prompt: str, output_format: dict, llm, max_retries: int = 5, retry_delay: int = 10) -> dict:
+
+async def strict_json_async_retry(
+        system_prompt: str,
+        user_prompt: str,
+        output_format: dict,
+        llm,
+        max_retries: int = 5,
+        retry_delay: int = 10) -> dict:
     """
     Call strict_json with retries on RateLimitError.
 
