@@ -1,24 +1,45 @@
+"""
+This module provides the ExternalRepoAgentHandler class and related
+functionality.
+
+The ExternalRepoAgentHandler class is responsible for managing an
+Aider instance initialized on another repository. It handles the
+initialization, communication, and termination of the Aider agent
+process. The class also provides methods to send messages, run
+commands, and find relevant code snippets in the repository.
+"""
 import logging
 import subprocess
 import time
-import httpx
 import asyncio
 from pathlib import Path
 from typing import AsyncGenerator
+import socket
+
+import httpx
+
 from . import utils
 from . import parse
 from .prompts import ExternalRepoAgentHandlerPrompts
 
-from strictjson import *
-
 
 class InitExternalRepoAgentError(RuntimeError):
+    """
+    Exception raised when the initialization of an ExternalRepoAgent
+    fails.
+
+    This exception is used to indicate that the ExternalRepoAgent could
+    not be initialized after the specified number of retries. It
+    typically occurs when the agent fails to start or respond to ping
+    requests within the allowed time frame.
+    """
     pass
 
 
 class ExternalRepoAgentHandler():
     """
-    A class to manage an Aider instance initialized on another repository.
+    A class to manage an Aider instance initialized on another
+    repository.
     """
     repo_dir: str = "."  # Directory of the repository
     port: int = -1  # Port number for the agent
@@ -36,12 +57,15 @@ class ExternalRepoAgentHandler():
 
         :param model_name: The name of the model to use.
         :param repo_dir: The directory of the repository.
-        :param max_concurrent_llm_queries: The maximum number of concurrent LLM queries.
+        :param max_concurrent_llm_queries: The maximum number of
+            concurrent LLM queries.
         """
 
         if not Path(repo_dir).is_dir():
             self.logger.error(
-                f"Attempt to initialize ExternalRepoAgent on non-existent directory {repo_dir}.")
+                ("Attempt to initialize ExternalRepoAgent on "
+                 "non-existent directory %s."),
+                repo_dir)
             raise FileNotFoundError
 
         # Standardize to use absolute path
@@ -56,48 +80,60 @@ class ExternalRepoAgentHandler():
 
         def get_free_port():
             # TODO: handle potential errors
-            import socket
             sock = socket.socket()
             sock.bind(('', 0))
             port = sock.getsockname()[1]
             sock.close()
             return port
 
-        # TODO: repomaps may take much longer to build if aider has never been initialized on the repo before
-        # Current implementation just kills the process and continues after reaching timeout
-        # One possible fix is to increase the timeout or remove it, but can I
-        # guarantee that it will always succeed if it doesnt terminate?
+        # TODO: repomaps may take much longer to build if aider has
+        # never been initialized on the repo before
+        # Current implementation just kills the process and continues
+        # after reaching timeout
+        # One possible fix is to increase the timeout or remove it, but
+        # can I guarantee that it will always succeed if it doesnt
+        # terminate?
 
         for _ in range(max_init_retry):
             self.port = get_free_port()
             self.logger.info(
-                f"Attempt to start an aider instance on port {self.port} with model {model_name}.")
+                "Attempt to start an aider instance on port %s with model %s.",
+                self.port,
+                model_name)
             self._process = subprocess.Popen(
-                f"exec init_repo_agent --port {self.port} --model-name {model_name}",
+                (f"exec init_repo_agent --port {self.port} "
+                 f"--model-name {model_name}"),
                 cwd=self.repo_dir,
                 shell=True)
             ping_success = self.wait_for_ping()
             if ping_success:
                 self.logger.info(
-                    f"Aider instance on port {self.port} returned ping, successfully initialized.")
+                    ("Aider instance on port %s returned ping, successfully "
+                     "initialized."),
+                    self.port)
                 break
-            else:
-                if self._process.poll() is None:
-                    self._process.kill()
-                self.logger.warning(
-                    f"Attempt to start Aider instance on port {self.port} killed.")
+
+            if self._process.poll() is None:
+                self._process.kill()
+            self.logger.warning(
+                "Attempt to start Aider instance on port %s killed.",
+                self.port)
         else:
             # Exhausted retries
             self.logger.error(
-                f"Aider instance failed to initialize within {max_init_retry} tries, quitting.")
+                ("Aider instance failed to initialize within %s tries, "
+                 "quitting."),
+                max_init_retry)
             raise InitExternalRepoAgentError(
                 f"Failed to initialize ExternalRepoAgent on {self.repo_dir}.")
 
     def wait_for_ping(self) -> bool:
         """
-        Wait for the Aider agent to respond with "pong" to a ping request.
+        Wait for the Aider agent to respond with "pong" to a ping
+        request.
 
-        :return: True if the agent responds with "pong", False if timeout is reached.
+        :return: True if the agent responds with "pong", False if
+            timeout is reached.
         """
         self.logger.info("Waiting for ping response.")
         timeout = 6  # TODO: set as class variable
@@ -109,7 +145,7 @@ class ExternalRepoAgentHandler():
                     self.logger.info("Ping successful.")
                     return True
             except httpx.RequestError as e:
-                self.logger.debug(f"Ping request failed: {e}")
+                self.logger.debug("Ping request failed: %s", e)
             # TODO: set as class variable
             time.sleep(1)  # Wait for 1 second before retrying
         self.logger.warning("Ping timeout reached.")
@@ -123,13 +159,13 @@ class ExternalRepoAgentHandler():
         :param msg: The message to send.
         :return: The response from the agent.
         """
-        self.logger.info(f"Sending message: {msg}")
+        self.logger.info("Sending message: %s", msg)
         response = httpx.post(
             f"http://0.0.0.0:{self.port}/run",
             params={"msg": msg},
         )
         result = response.json()["result"]
-        self.logger.debug(f"Received response: {result}")
+        self.logger.debug("Received response: %s", result)
         return result
 
     async def run_stream(
@@ -141,17 +177,18 @@ class ExternalRepoAgentHandler():
         :param chunk_size: The size of each chunk in the stream.
         :return: An async generator yielding parts of the response.
         """
-        self.logger.info(f"Sending message for streaming: {msg}")
+        self.logger.info("Sending message for streaming: %s", msg)
         response = httpx.post(
             f"http://0.0.0.0:{self.port}/run_stream",
             params={"msg": msg},
-            stream=True
         )
         for partial_response in response.iter_content(
                 chunk_size=chunk_size, decode_unicode=True):
             if isinstance(partial_response, bytes):
                 partial_response = partial_response.decode('utf-8')
-            self.logger.debug(f"Received partial response: {partial_response}")
+            self.logger.debug(
+                "Received partial response: %s",
+                partial_response)
             yield partial_response
 
     async def ask(self, msg: str,
@@ -162,17 +199,18 @@ class ExternalRepoAgentHandler():
         :param msg: The question to ask.
         :return: The response from the agent.
         """
-        self.logger.info(f"Asking question: {msg}")
+        self.logger.info("Asking question: %s", msg)
         response = httpx.post(
             f"http://0.0.0.0:{self.port}/ask",
             params={"msg": msg},
-            stream=True
         )
         for partial_response in response.iter_content(
                 chunk_size=chunk_size, decode_unicode=True):
             if isinstance(partial_response, bytes):
                 partial_response = partial_response.decode('utf-8')
-            self.logger.debug(f"Received partial response: {partial_response}")
+            self.logger.debug(
+                "Received partial response: %s",
+                partial_response)
             yield partial_response
 
     def run_cmd(self, cmd: str) -> str:
@@ -182,26 +220,54 @@ class ExternalRepoAgentHandler():
         :param cmd: The command to run.
         :return: The response from the agent.
         """
-        self.logger.info(f"Running command: {cmd}")
+        self.logger.info("Running command: %s", cmd)
         response = httpx.post(
             f"http://0.0.0.0:{self.port}/msg",
             params={"msg": f"/run {cmd}"},
         )
         result = response.json()["result"]
-        self.logger.info(f"Received command response: {result}")
+        self.logger.info("Received command response: %s", result)
         return result
 
     def get_repo_map(self) -> str:
+        """
+        Retrieve the repository map from the Aider agent.
+
+        This method sends a GET request to the Aider agent to obtain
+        the repository map, which is a structured representation of the
+        repository's contents. The repository map is useful for
+        understanding the structure and organization of the codebase.
+
+        :return: The repository map.
+        """
         self.logger.info("Getting repository map")
         response = httpx.get(
             f"http://0.0.0.0:{self.port}/get_repo_map"
         )
         repo_map = response.json()
-        self.logger.debug(f"Received repository map: {repo_map}")
+        self.logger.debug("Received repository map: %s", repo_map)
         return repo_map
 
     async def find_relevant_code(self, task):
-        self.logger.info(f"Finding relevant code for task: {task}")
+        """
+        Find relevant code snippets in the repository for a given task.
+
+        This method performs a multi-step process to identify and
+        retrieve code snippets that are relevant to the specified task.
+        It involves the following steps:
+
+        1. Retrieve a list of relevant files from the repository map.
+        2. Identify relevant class, method, and function definitions
+           within those files.
+        3. Validate the relevance of the identified definitions using
+           an LLM (Language Model).
+        4. Write the relevant code snippets to a file for further use.
+
+        :param task: A description of the task for which relevant code
+            snippets are to be found.
+        :return: None
+        """
+        self.logger.info("Finding relevant code for task: %s", task)
 
         # Delete existing code snippet file if it exists
         Path.unlink(Path(self.code_snippet_filename), missing_ok=True)
@@ -209,7 +275,7 @@ class ExternalRepoAgentHandler():
         # Step 1: Get list of relevant files
         self.logger.debug("Getting repository map")
         repo_map = self.get_repo_map()
-        self.logger.debug(f"Repository map: {repo_map}")
+        self.logger.debug("Repository map: %s", repo_map)
 
         system_prompt = ExternalRepoAgentHandlerPrompts.SYSTEM_PROMPT_FIND_RELEVANT_FILENAMES.format(
             repo_map=repo_map)
@@ -233,7 +299,7 @@ class ExternalRepoAgentHandler():
             # No real file names were generated, we should end early
             self.logger.info("No relevant filenames found")
             return
-        self.logger.debug(f"Relevant filenames found: {filenames}")
+        self.logger.debug("Relevant filenames found: %s", filenames)
 
         # Step 2: Get the relevant definitions
         self.logger.debug("Getting relevant definitions from filenames")
@@ -257,25 +323,27 @@ class ExternalRepoAgentHandler():
             # No useful defs found, we can stop early
             self.logger.info("No useful definitions found")
             return
-        self.logger.debug(f"Useful definitions found: {useful_defs}")
+        self.logger.debug("Useful definitions found: %s", useful_defs)
 
-        # Step 3: Get the code snippets that were requested, and do one more round of checking if they are actually relevant
+        # Step 3: Get the code snippets that were requested, and do
+        # one more round of checking if they are actually relevant
         # Create a semaphore to limit concurrent queries
         semaphore = asyncio.Semaphore(self.max_concurrent_llm_queries)
 
         async def process_file(filename, semaphore):
-            self.logger.info(f"Processing file: {filename}")
+            self.logger.info("Processing file: %s", filename)
 
-            # TODO: class, method and function defs are all processed the same
-            # way right now
+            # TODO: class, method and function defs are all processed
+            # the same way right now
             class_defs, method_defs, function_defs = parse.get_class_method_function_defs(
                 Path(self.repo_dir) / filename)
-            if class_defs is None and method_defs is None and function_defs is None:
+            if class_defs is None and method_defs is None and \
+                    function_defs is None:
                 self.logger.debug(
-                    f"No definitions parsed from file: {filename}")
-                return dict()
+                    "No definitions parsed from file: %s", filename)
+                return {}
 
-            definition_codes = dict()
+            definition_codes = {}
             for def_name in useful_defs[filename]:
                 if def_name in class_defs:
                     definition_codes[def_name] = class_defs[def_name]
@@ -285,7 +353,8 @@ class ExternalRepoAgentHandler():
                     definition_codes[def_name] = function_defs[def_name]
                 else:
                     self.logger.debug(
-                        f"Definition {def_name} not found in file: {filename}")
+                        "Definition %s not found in file: %s",
+                        def_name, filename)
 
             async with semaphore:
                 formatted_defs = ""
@@ -303,7 +372,7 @@ class ExternalRepoAgentHandler():
                     task=task)
 
                 self.logger.debug(
-                    f"Sending prompts to LLM for file: {filename}")
+                    "Sending prompts to LLM for file: %s", filename)
                 response = await utils.strict_json_async_retry(
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
@@ -321,7 +390,7 @@ class ExternalRepoAgentHandler():
             for def_name in result:
                 result[def_name]["code"] = definition_codes[def_name]
 
-            self.logger.info(f"Finished processing file: {filename}")
+            self.logger.info("Finished processing file: %s", filename)
             return result
 
         self.logger.debug("Creating tasks to process files")
@@ -338,7 +407,7 @@ class ExternalRepoAgentHandler():
             self.logger.info("No useful code snippets found")
             return
 
-        self.logger.debug(f"Useful codes found: {useful_codes}")
+        self.logger.debug("Useful codes found: %s", useful_codes)
 
         response = ""
         for filename in useful_codes:
@@ -349,12 +418,11 @@ class ExternalRepoAgentHandler():
                 response += "\n```\n\n"
         response = response.strip()
 
-        with open(self.code_snippet_filename, 'w') as code_snippet_file:
+        with open(self.code_snippet_filename, 'w',
+                  encoding="utf8") as code_snippet_file:
             code_snippet_file.write(response)
 
         self.logger.info("Relevant code snippets written to file")
-
-        return
 
     def kill(self):
         """
@@ -362,4 +430,3 @@ class ExternalRepoAgentHandler():
         """
         self.logger.info("Killing process")
         self._process.kill()
-        return

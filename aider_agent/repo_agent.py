@@ -1,14 +1,18 @@
-from fastapi import FastAPI
-from fastapi.responses import StreamingResponse
+"""
+This module defines classes and functions to manage repository agents that interact with the Aider system.
+It provides a FastAPI-based web service to handle various operations such as running code, asking questions,
+and retrieving repository maps.
+"""
+import argparse
+from typing import AsyncGenerator
 
 from aider.coders import Coder
 from aider.models import Model
 from aider.io import InputOutput
-
-import argparse
-from typing import AsyncGenerator
-
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 import litellm
+import uvicorn
 
 # Suppress debug information from litellm
 litellm.suppress_debug_info = True
@@ -75,6 +79,14 @@ class BaseRepoAgent:
         return self.coder.run_stream("/ask " + msg)
 
     def reset(self) -> str:
+        """Reset the agent to its initial state.
+
+        This method resets the internal state of the agent, clearing any
+        accumulated context or data. It is useful for starting fresh without
+        any prior context influencing the agent's behavior.
+
+        :return: The result of the reset operation.
+        """
         return self.run("/reset")
 
     def _get_repo_map(self) -> str:
@@ -86,6 +98,15 @@ class BaseRepoAgent:
         return repo_map
 
     def get_repo_map(self) -> str:
+        """Get the repository map.
+
+        This method retrieves the repository map, which is a representation
+        of the repository's structure and content. The map is used to
+        understand the layout and components of the repository, aiding in
+        various tasks such as code navigation and analysis.
+
+        :return: The repository map as a string.
+        """
         raise NotImplementedError
 
 
@@ -216,7 +237,6 @@ def main() -> None:
         model_name=args.model_name,
         map_tokens=args.map_tokens)
 
-    import uvicorn  # Import here to avoid unnecessary dependency if not running as main
     uvicorn.run(app, host="0.0.0.0", port=args.port)
 
 

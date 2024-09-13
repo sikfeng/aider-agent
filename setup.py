@@ -2,20 +2,18 @@ from pathlib import Path
 
 from setuptools import find_packages, setup
 
+
 def get_requirements(suffix=""):
     if suffix:
         fname = "requirements-" + suffix + ".txt"
         fname = Path("requirements") / fname
     else:
         fname = Path("requirements.txt")
-
     requirements = fname.read_text().splitlines()
-
     return requirements
 
 
 requirements = get_requirements()
-
 packages = find_packages()
 
 setup(

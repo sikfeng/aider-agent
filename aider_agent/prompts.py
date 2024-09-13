@@ -1,4 +1,13 @@
+"""
+This module contains prompt templates used by the Aider agent for
+various tasks.
+"""
+
+
 class PlannerAgentPrompts:
+    """
+    Contains prompt templates for PlannerAgent
+    """
     SYSTEM_PROMPT_GET_QUESTIONS = """
 You are a software engineer gathering information to complete a task. However, you suspect that some functionality has already been implemented, which you can reuse.
 
@@ -69,6 +78,9 @@ Given the list of questions and answers asked, extract the key points from the a
 
 
 class ExternalRepoAgentHandlerPrompts:
+    """
+    Contains prompt templates for ExternalRepoAgentHandlerPrompts
+    """
     SYSTEM_PROMPT_FIND_RELEVANT_FILENAMES = """
 You are a software developer maintaining a project.
 You are providing code snippets to a user who is working on a different project.

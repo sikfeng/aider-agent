@@ -1,3 +1,7 @@
+"""
+This module provides functionality to parse source code files and extract
+class, method, and function definitions using the tree-sitter library.
+"""
 from grep_ast import filename_to_lang
 from tree_sitter_languages import get_parser
 
@@ -7,8 +11,33 @@ from . import utils
 def get_class_method_function_defs(
         file_full_path: str) -> tuple[dict, dict, list] | None:
     """
-    Main method to parse a file (arbitrary language) and build search index using tree-sitter.
+    Parses a source code file to extract class, method, and function
+    definitions using tree-sitter.
+
+    This function reads the content of a source code file, determines
+    its programming language, and uses the tree-sitter library to parse
+    the file. It then traverses the syntax tree to extract definitions
+    of classes, methods, and functions, and returns them in separate
+    dictionaries.
+
+    :param file_full_path: The full path to the source code file to
+        be parsed.
+    :type file_full_path: str
+
+    :return: A tuple containing three elements:
+        - A dictionary where keys are class names and values are
+          their definitions.
+        - A dictionary where keys are method names and values are
+          their definitions.
+        - A dictionary where keys are function names and values are
+          their definitions.
+        Returns (None, None, None) if parsing fails.
+    :rtype: tuple[dict, dict, list] | None
+
+    :raises Exception: If there is an error in reading the file or parsing
+        its content.
     """
+
     file_full_path = utils.get_absolute_path(file_full_path)
     # I wish all languages had consistent types from the query, but alas
     # so we have to just test and add each case
@@ -17,7 +46,7 @@ def get_class_method_function_defs(
         lang = filename_to_lang(file_full_path)
 
         # Read the file content
-        with open(file_full_path, 'r') as file:
+        with open(file_full_path, 'r', encoding="utf-8") as file:
             file_content = file.read()
 
         # Initialize tree-sitter parser with language
@@ -32,9 +61,9 @@ def get_class_method_function_defs(
         return None, None, None
 
     # Initialize data structures to store parsed information
-    class_definitions = dict()
-    method_definitions = dict()
-    function_definitions = dict()
+    class_definitions = {}
+    method_definitions = {}
+    function_definitions = {}
 
     file_content_line = file_content.splitlines()
 

@@ -1,9 +1,15 @@
-from .repo_agent import MainRepoAgent
-
+"""
+This module defines the PlannerAgent class, which is responsible for
+managing the planning process for a given objective. The PlannerAgent
+utilizes a language model to gather information, generate questions,
+and create a plan consisting of subtasks to achieve the specified
+objective.
+"""
 import logging
 import asyncio
-from strictjson import strict_json
+
 from . import utils
+from .repo_agent import MainRepoAgent
 from .prompts import PlannerAgentPrompts
 
 
@@ -34,25 +40,24 @@ class PlannerAgent:
         self.max_concurrent_llm_queries = max_concurrent_llm_queries
         self.max_reflections = max_reflections
 
-        return
-
     async def gather_information(self, objective: str) -> dict:
         """
-        Gather necessary information to generate a plan for the given objective.
+        Gather necessary information to generate a plan for the given
+        objective.
 
         :param objective: The main objective.
         :return: A dictionary containing the gathered information.
         """
-        # TODO: this is very messy instantiating multiple MainRepoAgents, can it be cleaner?
-        # TODO: handle case where repo is empty => repo map is empty
+        # TODO: this is very messy instantiating multiple
+        # MainRepoAgents, can it be cleaner?
         main_repo_agent = MainRepoAgent(model_name=self.model_name)
         repo_map = main_repo_agent.get_repo_map()
         del main_repo_agent
 
         self.logger.info("Repo Map: %s", repo_map)
         # if the git repo has no files, repo_map is None
-        # not sure if there is a case where repo_map may be just whitespace but
-        # I handle it as the same
+        # not sure if there is a case where repo_map may be just
+        # whitespace but I handle it as the same
         if repo_map is None or repo_map.strip() == "":
             return None
 
@@ -61,7 +66,7 @@ class PlannerAgent:
             repo_map=repo_map, max_questions=self.max_questions)
         user_prompt = PlannerAgentPrompts.USER_PROMPT_GET_QUESTIONS.format(
             objective=objective)
-        questions_response = strict_json(
+        questions_response = await utils.strict_json_retry(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             output_format={
@@ -84,8 +89,7 @@ class PlannerAgent:
                 response += curr_response + "\n"
                 if main_repo_agent.coder.reflected_message is None:
                     break
-                else:
-                    query_message = main_repo_agent.coder.reflected_message
+                query_message = main_repo_agent.coder.reflected_message
             return question, response
 
         async def limited_ask_aider(semaphore, question):
@@ -107,12 +111,12 @@ class PlannerAgent:
         formatted_gathered_info = ""
 
         for question, answer in gathered_info:
-            formatted_gathered_info += """**Question:**
+            formatted_gathered_info += f"""**Question:**
 {question}
 
 **Answer:**
 {answer}
-""".format(question=question, answer=answer)
+"""
         self.logger.info("Gathered Information: %s", formatted_gathered_info)
 
         # Summarize the gathered information
@@ -133,14 +137,16 @@ class PlannerAgent:
         :param objective: The main objective.
         :return: A list of subtasks.
         """
-        '''# Restate the problem statement
+        '''
+        # Restate the problem statement
         system_prompt = """You are a requirements analyst.
 Restate the following as an instruction for a software developer
 """
         user_prompt = objective
         objective = utils.llm(self.model_name)(
             system_prompt=system_prompt, user_prompt=user_prompt
-        )'''
+        )
+        '''
 
         # Gather necessary information
         gathered_info_summary = await self.gather_information(objective)
@@ -151,7 +157,7 @@ Restate the following as an instruction for a software developer
             system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_GENERATE_SUBTASKS.format(
                 max_subtasks=self.max_subtasks, gathered_info_summary=gathered_info_summary)
 
-        res = strict_json(
+        res = await utils.strict_json_retry(
             system_prompt=system_prompt,
             user_prompt=f"Objective: {objective}",
             output_format={'Plan': 'Array of subtasks, type: Array[str]'},
@@ -162,7 +168,8 @@ Restate the following as an instruction for a software developer
 
     def finetune_subtasks(self, objective: str, instruction: str) -> list[str]:
         """
-        Finetune the generated subtasks based on additional instructions.
+        Finetune the generated subtasks based on additional
+        instructions.
 
         :param objective: The main objective.
         :param instruction: Additional instructions for finetuning.

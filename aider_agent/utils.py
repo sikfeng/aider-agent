@@ -1,11 +1,18 @@
+"""
+Utility functions for the Aider Agent.
+
+This module provides various utility functions to support the
+operations of the Aider Agent. It includes functions for path
+manipulation, synchronous and asynchronous LLM completion, and retry
+mechanisms for strict JSON parsing.
+"""
+import asyncio
 from functools import partial
 from pathlib import Path
-import asyncio
-
-from strictjson import *
 
 import litellm
 from litellm import acompletion, completion
+from strictjson import strict_json, strict_json_async
 
 litellm.suppress_debug_info = True
 litellm.set_verbose = True

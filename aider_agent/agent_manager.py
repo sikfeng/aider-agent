@@ -1,22 +1,31 @@
-import litellm
-from distro import name as distro_name
-import platform
-import os
-from pathlib import Path
+"""
+This module defines the `AgentManager` class, which is responsible for
+managing the overall process and agents in the system. The
+`AgentManager` class initializes and coordinates various agents,
+including the main repository agent, external repository agents, and
+the planner agent. It provides methods to generate and run subtasks,
+initialize agents, and manage the state of the system.
+"""
 import asyncio
 import logging
-from strictjson import *
+import os
+from pathlib import Path
+import platform
+import re
 from typing import AsyncGenerator, List, Dict, Optional
 
-import re
+from distro import name as distro_name
+import litellm
+
 from . import utils
-from .external_repo_agent_handler import InitExternalRepoAgentError, ExternalRepoAgentHandler
+from .external_repo_agent_handler import ExternalRepoAgentHandler, \
+    InitExternalRepoAgentError
 from .planner_agent import PlannerAgent
 from .repo_agent import MainRepoAgent
 
+litellm.drop_params = True
 litellm.suppress_debug_info = True
 litellm.set_verbose = False
-litellm.drop_params = True
 
 
 class AgentManager:
@@ -33,7 +42,7 @@ class AgentManager:
         self.planner_agent: Optional[PlannerAgent] = None
         self.main_repo_agent: Optional[MainRepoAgent] = None
         self.external_repo_agent_handlers: Dict[str,
-                                                ExternalRepoAgentHandler] = dict()
+                                                ExternalRepoAgentHandler] = {}
         self.logger = logging.getLogger("AgentManager")
         self.model_name = model_name
         self.max_reflections = max_reflections
@@ -85,15 +94,19 @@ class AgentManager:
         repo_dir = utils.get_absolute_path(repo_dir)
         if not Path(repo_dir).is_dir():
             self.logger.warning(
-                f"Attempt to initialize ExternalRepoAgent on non-existent directory {repo_dir}, skipping.")
+                ("Attempt to initialize ExternalRepoAgent on non-existent "
+                 "directory %s, skipping."),
+                repo_dir)
             return False
         if repo_dir == utils.get_absolute_path("."):
             self.logger.warning(
-                "Attempt to initialize ExternalRepoAgent on main repo, skipping.")
+                ("Attempt to initialize ExternalRepoAgent on main repo, "
+                 "skipping."))
             return False
         if repo_dir in self.external_repo_agent_handlers:
             self.logger.warning(
-                "Attempt to initialize a new ExternalRepoAgent on already initialized repo, skipping.")
+                ("Attempt to initialize a new ExternalRepoAgent on already "
+                 "initialized repo, skipping."))
             return False
 
         try:
@@ -101,11 +114,12 @@ class AgentManager:
                 model_name=model_name, repo_dir=repo_dir)
             self.external_repo_agent_handlers[repo_dir] = agent
             self.logger.info(
-                f"Successfully initialized an ExternalRepoAgent on {repo_dir}.")
+                "Successfully initialized an ExternalRepoAgent on %s.",
+                repo_dir)
             return True
-        except InitExternalRepoAgentError as e:
+        except InitExternalRepoAgentError:
             self.logger.warning(
-                f"Failed to initialize an ExternalRepoAgent on {repo_dir}.")
+                "Failed to initialize an ExternalRepoAgent on %s.", repo_dir)
             return False
 
     def init_main_repo_agent(self, model_name: str = "azure/gpt-4o") -> bool:
@@ -145,7 +159,7 @@ class AgentManager:
         :param objective: The main objective.
         :return: A list of subtasks.
         """
-        self.logger.info(f"Generating subtasks for {objective}.")
+        self.logger.info("Generating subtasks for %s.", objective)
         return await self.planner_agent.generate_subtasks(objective)
 
     def finetune_subtasks(self, objective: str, instruction: str) -> List[str]:
@@ -166,28 +180,32 @@ class AgentManager:
         :return: An async generator yielding parts of the response.
         """
 
-        # TODO: something is still running concurrently in here, which gives rate limits
-        # even when external repo agents is empty
+        # TODO: something is still running concurrently in here, which
+        # gives rate limits even when external repo agents is empty
 
-        self.logger.info(f"Starting to run {subtask}.")
-        self.logger.info(f"Querying ExternalRepoAgentHandlers.")
-        await asyncio.gather(*(external_repo_agent.find_relevant_code(subtask) for external_repo_agent in self.external_repo_agent_handlers.values()))
+        self.logger.info("Starting to run %s.", subtask)
+        self.logger.info("Querying ExternalRepoAgentHandlers.")
+        await asyncio.gather(*(external_repo_agent.find_relevant_code(subtask)
+                               for external_repo_agent
+                               in self.external_repo_agent_handlers.values()))
 
         for repo_path in self.external_repo_agent_handlers:
-            code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.','')}.txt"
-            self.logger.info(f"Found {code_snippet_filename}.")
+            code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.', '')}.txt"
+            self.logger.info("Found %s.", code_snippet_filename)
             try:
                 self.main_repo_agent.run(f"/read-only {code_snippet_filename}")
             except BaseException:  # TODO: use a narrower exception type
                 self.logger.warning(
-                    f"Did not find {code_snippet_filename}, skipping.")
+                    "Did not find %s, skipping.", code_snippet_filename)
 
         completed_tasks = ""
 
-        if len(self.completed_subtasks) > 0:
+        if self.completed_subtasks:
             completed_tasks = "These are the tasks that you have already completed:\n"
-            completed_tasks += "\n".join([f"{j+1}: {t}" for j,
-                                          t in enumerate(self.completed_subtasks)])
+            completed_tasks += "\n".join(
+                [f"{j+1}: {t}" for j,
+                 t in enumerate(self.completed_subtasks)]
+            )
 
         message = ""
         if len(self.completed_subtasks) > 0:
@@ -210,7 +228,7 @@ If you wish to edit a file, add the file to the chat.
         response = ""
         for _ in range(self.max_reflections):
             curr_response = ""
-            self.logger.debug(f"Message: {message}")
+            self.logger.debug("Message: %s", message)
             async for partial_response in self.main_repo_agent.run_stream(message):
                 curr_response += partial_response
                 yield partial_response
@@ -221,9 +239,11 @@ If you wish to edit a file, add the file to the chat.
             def check_for_shell_cmds_in_response(
                     aider_agent_response: str) -> Optional[List[str]]:
                 """
-                Check if there are shell commands in the Aider agent response.
+                Check if there are shell commands in the Aider agent
+                response.
 
-                :param aider_agent_response: The response from the Aider agent.
+                :param aider_agent_response: The response from the
+                    Aider agent.
                 :return: The shell command if found, otherwise None.
                 """
                 # List of shell code block markers
@@ -248,7 +268,7 @@ If you wish to edit a file, add the file to the chat.
 
             # Check for shell commands and files to add in the response
             shell_cmds = check_for_shell_cmds_in_response(curr_response)
-            self.logger.debug(f"Found shell commands {shell_cmds}")
+            self.logger.debug("Found shell commands %s", shell_cmds)
 
             if shell_cmds is not None:
                 for command in shell_cmds:
@@ -261,8 +281,8 @@ If you wish to edit a file, add the file to the chat.
 
             if self.main_repo_agent.coder.reflected_message is None:
                 break
-            else:
-                message = self.main_repo_agent.coder.reflected_message
+
+            message = self.main_repo_agent.coder.reflected_message
 
         self.completed_subtasks.append(subtask)
 
@@ -270,16 +290,18 @@ If you wish to edit a file, add the file to the chat.
         """
         Undo the last completed subtask.
 
-        :return: True if the undo operation was successful, otherwise False.
+        :return: True if the undo operation was successful, otherwise
+            False.
         """
         if len(self.completed_subtasks) > 0:
             self.completed_subtasks.pop()
             # TODO: check if result was successful
             result = self.main_repo_agent.run('/undo')
+            print(result)
             return True
-        else:
-            self.logger.warning("No previously completed subtasks.")
-            return False
+
+        self.logger.warning("No previously completed subtasks.")
+        return False
 
     async def run_multiple_subtasks(
             self, subtasks: List[str]) -> AsyncGenerator[str, None]:
@@ -304,7 +326,7 @@ If you wish to edit a file, add the file to the chat.
         :return: A list of initialized Aider agents.
         """
         self.logger.debug(
-            f"ExternalRepoAgents: {self.external_repo_agent_handlers.keys}")
+            "ExternalRepoAgents: %s", self.external_repo_agent_handlers.keys)
         return list(self.external_repo_agent_handlers.keys())
 
     def shutdown(self) -> str:
@@ -314,6 +336,6 @@ If you wish to edit a file, add the file to the chat.
         :return: "shutdown" after shutting down all agents.
         """
         for repo_dir, external_repo_agent in self.external_repo_agent_handlers.items():
-            self.logger.info(f"Killing ExternalRepoAgent on {repo_dir}.")
+            self.logger.info("Killing ExternalRepoAgent on %s.", repo_dir)
             external_repo_agent.kill()
         return "shutdown"
