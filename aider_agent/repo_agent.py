@@ -110,6 +110,7 @@ class ExternalRepoAgent(BaseRepoAgent):
         # Hence we simply store the repo_map and just retrieve it.
         return self.repo_map
 
+
 class MainRepoAgent(BaseRepoAgent):
     """A class to manage the MainRepoAgent."""
 
