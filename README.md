@@ -18,8 +18,10 @@ The Aider Agent system is designed to manage multiple agents that can perform va
 
 - `aider_agent/`: Main directory containing the core functionalities.
   - `external_repo_agent_handler.py`: Manages external repository agents.
+  - `launch.py`: Launches the AgentManager with a WebSocket endpoint.
   - `logger.py`: Configures logging for the application.
-  - `manager.py`: Manages the overall process and agents.
+  - `agent_manager.py`: Manages the overall process and agents.
+  - `connection_manager.py`: Manages WebSocket connections.
   - `planner_agent.py`: Manages the Planner agent.
   - `repo_agent.py`: Manages the Main and External Repo agents.
   - `test_stream.py`: Contains test functions for API endpoints.
@@ -47,7 +49,7 @@ The Aider Agent system is designed to manage multiple agents that can perform va
 
 To run the main application, execute:
 ```sh
-python -m aider_agent.manager
+launch_endpoint
 ```
 
 ## API Endpoints
