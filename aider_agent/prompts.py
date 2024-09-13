@@ -105,27 +105,22 @@ Here are the files which the contain relevant code snippets.
 For each of the above files, look through the repository structure to suggest the relevant class or functions that can be used for the following task.
 
 {task}
+
+Only provide the class or function names, do not include the decorators such as "class ClassName", "def FunctionName", function FunctionName" etc.
 """
 
-    SYSTEM_PROMPT_PROCESS_FILE = """
+    SYSTEM_PROMPT_PROCESS_FILE_FOR_DEFINITIONS = """
 You are a software developer maintaining a project.
 You are providing code snippets to a user who is working on a different project.
 The user will integrate the code snippets into their project to achieve a task.
+Here are some class, method or function names with their definitions
 
-Here are the contents of {filename}:
+{formatted_defs}
 
-```
-{file_contents}
-```
+Determine which ones may be useful for our task, as well as an explanation of why they may be useful.
 """
 
-    USER_PROMPT_PROCESS_FILE = """
-For the following class, method and function names, extract their code from the file contents.
-Also, determine if the code snippet will be useful, and if so explanation of why they are useful for the task.
-
-Class, method and function names:
-{definitions}
-
+    USER_PROMPT_PROCESS_FILE_FOR_DEFINITIONS = """
 Task:
 {task}
 """

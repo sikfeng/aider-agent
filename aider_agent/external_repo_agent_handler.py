@@ -6,10 +6,10 @@ import asyncio
 from pathlib import Path
 from typing import AsyncGenerator
 from . import utils
+from . import parse
 from .prompts import ExternalRepoAgentHandlerPrompts
 
 from strictjson import *
-import litellm
 
 
 class InitExternalRepoAgentError(RuntimeError):
@@ -207,12 +207,16 @@ class ExternalRepoAgentHandler():
         Path.unlink(Path(self.code_snippet_filename), missing_ok=True)
 
         # Step 1: Get list of relevant files
+        self.logger.debug("Getting repository map")
         repo_map = self.get_repo_map()
+        self.logger.debug(f"Repository map: {repo_map}")
+
         system_prompt = ExternalRepoAgentHandlerPrompts.SYSTEM_PROMPT_FIND_RELEVANT_FILENAMES.format(
             repo_map=repo_map)
         user_prompt = ExternalRepoAgentHandlerPrompts.USER_PROMPT_FIND_RELEVANT_FILENAMES.format(
             task=task)
 
+        self.logger.debug("Sending prompts to LLM to find relevant filenames")
         res = await utils.strict_json_retry(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
@@ -229,8 +233,10 @@ class ExternalRepoAgentHandler():
             # No real file names were generated, we should end early
             self.logger.info("No relevant filenames found")
             return
+        self.logger.debug(f"Relevant filenames found: {filenames}")
 
         # Step 2: Get the relevant definitions
+        self.logger.debug("Getting relevant definitions from filenames")
         system_prompt = ExternalRepoAgentHandlerPrompts.SYSTEM_PROMPT_FIND_RELEVANT_DEFINITIONS.format(
             repo_map=repo_map)
         user_prompt = ExternalRepoAgentHandlerPrompts.USER_PROMPT_FIND_RELEVANT_DEFINITIONS.format(
@@ -251,45 +257,74 @@ class ExternalRepoAgentHandler():
             # No useful defs found, we can stop early
             self.logger.info("No useful definitions found")
             return
+        self.logger.debug(f"Useful definitions found: {useful_defs}")
 
-        # TODO: consider using static analysis to extract the codes instead
         # Step 3: Get the code snippets that were requested, and do one more round of checking if they are actually relevant
         # Create a semaphore to limit concurrent queries
         semaphore = asyncio.Semaphore(self.max_concurrent_llm_queries)
 
         async def process_file(filename, semaphore):
+            self.logger.info(f"Processing file: {filename}")
+
+            # TODO: class, method and function defs are all processed the same
+            # way right now
+            class_defs, method_defs, function_defs = parse.get_class_method_function_defs(
+                Path(self.repo_dir) / filename)
+            if class_defs is None and method_defs is None and function_defs is None:
+                self.logger.debug(
+                    f"No definitions parsed from file: {filename}")
+                return dict()
+
+            definition_codes = dict()
+            for def_name in useful_defs[filename]:
+                if def_name in class_defs:
+                    definition_codes[def_name] = class_defs[def_name]
+                elif def_name in method_defs:
+                    definition_codes[def_name] = method_defs[def_name]
+                elif def_name in function_defs:
+                    definition_codes[def_name] = function_defs[def_name]
+                else:
+                    self.logger.debug(
+                        f"Definition {def_name} not found in file: {filename}")
+
             async with semaphore:
-                system_prompt = ""
-                with open(Path(self.repo_dir) / filename) as f:
-                    file_contents = f.read()
-                    system_prompt = ExternalRepoAgentHandlerPrompts.SYSTEM_PROMPT_PROCESS_FILE.format(
-                        filename=filename, file_contents=file_contents)
+                formatted_defs = ""
+                for def_name, def_code in definition_codes.items():
+                    formatted_defs += f"""
+`{def_name}` code:
+```
+{def_code}
+```
 
-                user_prompt = ExternalRepoAgentHandlerPrompts.USER_PROMPT_PROCESS_FILE.format(
-                    definitions=", ".join(f"`{def_name}`" for def_name in useful_defs[filename]),
-                    task=task
-                )
-
-                user_prompt = user_prompt.format(
-                    definitions=", ".join(
-                        f"`{def_name}`" for def_name in useful_defs[filename]),
+"""
+                system_prompt = ExternalRepoAgentHandlerPrompts.SYSTEM_PROMPT_PROCESS_FILE_FOR_DEFINITIONS.format(
+                    formatted_defs=formatted_defs)
+                user_prompt = ExternalRepoAgentHandlerPrompts.USER_PROMPT_PROCESS_FILE_FOR_DEFINITIONS.format(
                     task=task)
 
-                res = await utils.strict_json_async_retry(
+                self.logger.debug(
+                    f"Sending prompts to LLM for file: {filename}")
+                response = await utils.strict_json_async_retry(
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
                     output_format={
                         def_name: {
-                            "code": f"code for `{def_name}`, type: code",
                             "useful": f"whether `{def_name}` is useful, type: bool",
                             "description": f"explanation of why `{def_name}` is useful for the task, type: str"
-                        } for def_name in useful_defs[filename]
+                        } for def_name in definition_codes
                     },
                     llm=utils.llm_async(self.model_name)
                 )
-                return {def_name: res[def_name]
-                        for def_name in res if res[def_name]["useful"]}
 
+            result = {def_name: response[def_name]
+                      for def_name in response if response[def_name]["useful"]}
+            for def_name in result:
+                result[def_name]["code"] = definition_codes[def_name]
+
+            self.logger.info(f"Finished processing file: {filename}")
+            return result
+
+        self.logger.debug("Creating tasks to process files")
         tasks = [process_file(filename, semaphore) for filename in useful_defs]
         results = await asyncio.gather(*tasks)
 
@@ -298,6 +333,12 @@ class ExternalRepoAgentHandler():
             result in zip(
                 useful_defs,
                 results) if len(result) > 0}
+
+        if not useful_codes:
+            self.logger.info("No useful code snippets found")
+            return
+
+        self.logger.debug(f"Useful codes found: {useful_codes}")
 
         response = ""
         for filename in useful_codes:
