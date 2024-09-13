@@ -1,47 +1,25 @@
-'''
-TODO
-------
-Decide whether to use http or websockets
-Better error handling
-Implement subtask finetuning
-Move prompts out of the code
-Overload coder.fmt_system_prompt() to continue generating shell commands
-Draw mermaid diagram showing flow of top level functions from Manager
-Set up litellm load balancing, retries, timeouts etc. https://docs.litellm.ai/docs/proxy/reliability
-'''
 import litellm
 from distro import name as distro_name
 import platform
-import signal
 import os
 from pathlib import Path
 import asyncio
 import logging
-import argparse
-from fastapi.responses import StreamingResponse
-from fastapi import FastAPI
 from strictjson import *
 from typing import AsyncGenerator, List, Dict, Optional
-
-from fastapi import WebSocket, WebSocketDisconnect
 
 import re
 from . import utils
 from .external_repo_agent_handler import InitExternalRepoAgentError, ExternalRepoAgentHandler
 from .planner_agent import PlannerAgent
 from .repo_agent import MainRepoAgent
-from logging.config import dictConfig
-from .logger import LOG_CONFIG
-
 
 litellm.suppress_debug_info = True
 litellm.set_verbose = False
 litellm.drop_params = True
 
-app = FastAPI()
 
-
-class Manager:
+class AgentManager:
     """
     A class to manage the overall process and agents.
     """
@@ -50,7 +28,7 @@ class Manager:
                  max_reflections: int = 5,
                  max_concurrent_queries: int = 1) -> None:
         """
-        Initialize the Manager.
+        Initialize the AgentManager.
         """
         self.planner_agent: Optional[PlannerAgent] = None
         self.main_repo_agent: Optional[MainRepoAgent] = None
@@ -339,116 +317,3 @@ If you wish to edit a file, add the file to the chat.
             self.logger.info(f"Killing ExternalRepoAgent on {repo_dir}.")
             external_repo_agent.kill()
         return "shutdown"
-
-
-manager = None
-
-logger = logging.getLogger("WebSocketEndpoint")
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    logger.info("WebSocket connection accepted")
-    try:
-        async def send_keepalive_pings():
-            while True:
-                await asyncio.sleep(10)  # Adjust the interval as needed
-                await websocket.send_json({"ping": "keepalive"})
-                logger.debug("Sent keepalive ping")
-
-        keepalive_task = asyncio.create_task(send_keepalive_pings())
-
-        while True:
-            data = await websocket.receive_json()
-            logger.info(f"Received data: {data}")
-            method = data.get("method")
-            params = data.get("params", {})
-
-            if method == "init_external_repo_agent":
-                repo_dir = params.get("repo_dir")
-                result = manager.init_external_repo_agent(repo_dir)
-                await websocket.send_json({"result": "Success" if result else "Failure"})
-                await websocket.send_json({"result": "</eos_token>"})
-                logger.info(f"init_external_repo_agent result: {'Success' if result else 'Failure'}")
-
-            elif method == "get_external_repo_agents":
-                agents = str(manager.get_external_repo_agents())
-                await websocket.send_json({"result": agents})
-                await websocket.send_json({"result": "</eos_token>"})
-                logger.info(f"get_external_repo_agents result: {agents}")
-
-            elif method == "generate_subtasks":
-                objective = params.get("objective")
-                import json
-                subtasks = json.dumps(await manager.generate_subtasks(objective))
-                await websocket.send_json({"result": subtasks})
-                await websocket.send_json({"result": "</eos_token>"})
-                logger.info(f"generate_subtasks result: {subtasks}")
-
-            elif method == "finetune_subtasks":
-                objective = params.get("objective")
-                instruction = params.get("instruction")
-                subtasks = manager.finetune_subtasks(objective, instruction)
-                await websocket.send_json({"result": subtasks})
-                await websocket.send_json({"result": "</eos_token>"})
-                logger.info(f"finetune_subtasks result: {subtasks}")
-
-            elif method == "run_subtask":
-                subtask = params.get("subtask")
-                async for response in manager.run_subtask(subtask):
-                    await websocket.send_json({"result": response})
-                    logger.info(f"run_subtask response: {response}")
-                await websocket.send_json({"result": "</eos_token>"})
-
-            elif method == "run_multiple_subtasks":
-                subtasks = params.get("subtasks")
-                async for response in manager.run_multiple_subtasks(subtasks):
-                    await websocket.send_json({"result": response})
-                    logger.info(f"run_multiple_subtasks response: {response}")
-                await websocket.send_json({"result": "</eos_token>"})
-
-            elif method == "undo_last_subtask":
-                result = manager.undo_last_subtask()
-                await websocket.send_json({"result": "Success" if result else "Failure"})
-                await websocket.send_json({"result": "</eos_token>"})
-                logger.info(f"undo_last_subtask result: {'Success' if result else 'Failure'}")
-
-            elif method == "shutdown":
-                manager.shutdown()
-                await websocket.send_json({"result": "shutdown"})
-                await websocket.send_json({"result": "</eos_token>"})
-                logger.info("Shutdown initiated")
-                os.kill(os.getpid(), signal.SIGTERM)
-
-    except WebSocketDisconnect:
-        logger.warning("Client disconnected")
-    finally:
-        keepalive_task.cancel()
-        logger.info("Keepalive task cancelled")
-
-def main() -> None:
-    """
-    Main function to run the application.
-    """
-    parser = argparse.ArgumentParser(
-        description="Run the Aider agent manager.")
-    parser.add_argument('--port', type=int, help='Port of the agent', default=10000)
-    parser.add_argument('--logname', type=str, help='Path to logfile', default="/tmp/manager.log")
-    args = parser.parse_args()
-
-    LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(args.logname)
-    if Path(LOG_CONFIG['handlers']['fileHandler']['filename']).is_file():
-        # TODO: ask for user confirmation to overwrite logfile
-        # for now I will just overwrite it anyways
-        Path(LOG_CONFIG['handlers']['fileHandler']['filename']).unlink()
-    dictConfig(LOG_CONFIG)
-
-    global manager
-    manager = Manager()
-    import uvicorn  # Import Uvicorn for running the FastAPI app
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
-
-
-# Run the application with Uvicorn
-if __name__ == "__main__":
-    main()

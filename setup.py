@@ -1,4 +1,3 @@
-import re
 from pathlib import Path
 
 from setuptools import find_packages, setup
@@ -27,10 +26,10 @@ setup(
     package_dir={"aider_agent": "aider_agent"},
     entry_points={
         "console_scripts": [
-            "init_aider_instance = aider_agent.repo_agent:main",
-            "manager = aider_agent.manager:main",
+            "init_repo_agent = aider_agent.repo_agent:main",
+            "launch_endpoint = aider_agent.launch:main",
         ],
     },
-    description="software dev agents with aider",
+    description="Autonomous Software Development",
     url="https://github.com/sikfeng/aider-agent",
 )
