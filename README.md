@@ -17,14 +17,16 @@ The Aider Agent system is designed to manage multiple agents that can perform va
 ## Directory Structure
 
 - `aider_agent/`: Main directory containing the core functionalities.
-  - `external_repo_agent_handler.py`: Manages external repository agents.
-  - `launch.py`: Launches the AgentManager with a WebSocket endpoint.
-  - `logger.py`: Configures logging for the application.
+  - `__init__.py`: Initializes the `aider_agent` package and configures the `litellm` library.
   - `agent_manager.py`: Manages the overall process and agents.
-  - `connection_manager.py`: Manages WebSocket connections.
-  - `planner_agent.py`: Manages the Planner agent.
-  - `repo_agent.py`: Manages the Main and External Repo agents.
-  - `test_stream.py`: Contains test functions for API endpoints.
+  - `connection_manager.py`: Manages WebSocket connections and message buffering.
+  - `external_repo_agent_handler.py`: Manages interactions with ExternalRepoAgent.
+  - `launch.py`: Launches the ConnectionManager with a WebSocket endpoint.
+  - `logger.py`: Configures logging for the application.
+  - `parse.py`: Provides functionality to parse source code files and extract class, method, and function definitions using the tree-sitter library.
+  - `planner_agent.py`: Manages the planning process for a given objective.
+  - `prompts.py`: Contains prompt templates used by the agents for various tasks.
+  - `repo_agent.py`: Manages MainRepoAgent and ExternalRepoAgent.
   - `utils.py`: Utility functions for various tasks.
 
 ## Installation
@@ -69,7 +71,7 @@ The system provides several WebSocket methods for interacting with the agents:
   - `GET /get_repo_map`: Retrieves the repository map.
   - `GET /ping`: Pings the agent to check if it's alive.
 
-- **Manager Methods** (WebSocket endpoint: `/ws`):
+- **Manager Methods** :(WebSocket endpoint: `ws://<host>:<port>/ws/{session_id}`)
   - `init_external_repo_agent`: Initializes an external repository agent.
     - **Params**: 
       - `repo_dir` (str): The directory of the repository.

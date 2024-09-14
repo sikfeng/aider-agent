@@ -38,7 +38,7 @@ async def test_websocket_endpoint(uri, method, params=None):
 
 
 async def test():
-    uri = f"ws://localhost:{PORT}/ws"
+    uri = f"ws://localhost:{PORT}/ws/tmp_session_id"
 
     external_repos = ["../continue"]
     task = "Make a basic hello world vscode extension"
