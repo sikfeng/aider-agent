@@ -1,6 +1,6 @@
-# Aider Agent Repository
+# Raider Backend Repository
 
-This repository contains the implementation of the Aider Agent, a system designed to manage and interact with various agents for code analysis and task management.
+This repository contains the implementation of the Raider Backend, a system designed to manage and interact with various agents for code analysis and task management.
 
 ## Table of Contents
 
@@ -12,7 +12,7 @@ This repository contains the implementation of the Aider Agent, a system designe
 
 ## Overview
 
-The Aider Agent system is designed to manage multiple agents that can perform various tasks such as running code, generating subtasks, and managing external repositories. The system is built using Python and provides both synchronous and asynchronous functionalities.
+The Raider Backend system is designed to manage multiple agents that can perform various tasks such as running code, generating subtasks, and managing external repositories. The system is built using Python and provides both synchronous and asynchronous functionalities.
 
 ## Directory Structure
 
