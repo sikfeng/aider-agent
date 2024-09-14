@@ -180,8 +180,7 @@ class AgentManager:
         :return: An async generator yielding parts of the response.
         """
 
-        # TODO: something is still running concurrently in here, which
-        # gives rate limits even when external repo agents is empty
+        # TODO: refactor parts of this method under MainAiderAgent instead
 
         self.logger.info("Starting to run %s.", subtask)
         self.logger.info("Querying ExternalRepoAgentHandlers.")
@@ -290,6 +289,7 @@ If you wish to edit a file, add the file to the chat.
 
             message = self.main_repo_agent.coder.reflected_message
 
+        self.main_repo_agent.commit()
         self.completed_subtasks.append(subtask)
 
     def undo(self) -> None:

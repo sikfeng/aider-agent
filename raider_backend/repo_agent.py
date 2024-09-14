@@ -121,6 +121,20 @@ class BaseRepoAgent:
         # unused, with no default value either...
         self.coder.commands.cmd_undo(None)
 
+    def commit(self) -> None:
+        """
+        Commit the current changes made by the agent.
+
+        This method performs a commit operation, saving the current state of the
+        repository. It is useful for persisting changes made by the agent, ensuring
+        that the modifications are recorded in the version control system.
+
+        Note: Aider does not programmatically return any result indicating whether
+        the commit operation was successful, hence we are also unable to return
+        anything useful.
+        """
+        self.coder.commands.cmd_commit()
+
     def _get_repo_map(self) -> str:
         """Retrieve the repository map without the content prefix..
 
