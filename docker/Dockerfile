@@ -37,5 +37,3 @@ FROM aider AS aider-agent
 COPY requirements.txt /tmp
 RUN /venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements.txt
 RUN rm /tmp/requirements.txt
-
-ENTRYPOINT ["/bin/bash"]

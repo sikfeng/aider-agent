@@ -54,6 +54,24 @@ To run the main application, execute:
 launch_endpoint
 ```
 
+### Running in a Devcontainer
+
+1. **Open the repository in Visual Studio Code**:
+    - Ensure you have the [Remote - Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension installed.
+
+2. **Reopen in Container**:
+    - Click on the green button in the bottom-left corner of the VS Code window.
+    - Select `Reopen in Container`.
+
+3. **Post Start Command**:
+    - After the container starts, the `postStartCommand` defined in `.devcontainer/devcontainer.json` will automatically install the necessary dependencies.
+
+**Note**:  The devcontainer will only mount the parent directory of this repository as the VS Code workspace. Therefore, the repository you are working on and any repository you want to use as context must be within the parent directory of the current repository.
+
+**Environment Variables**: You can add environment variables such as API keys to the `.env` file within the `.devcontainer` directory. This will ensure that these variables are available within the development container.
+
+This will set up the development environment inside a Docker container, ensuring consistency across different development setups.
+
 ## API Endpoints
 
 The system provides several WebSocket methods for interacting with the agents:
