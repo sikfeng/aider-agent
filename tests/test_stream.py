@@ -5,8 +5,8 @@ from logging.config import dictConfig
 
 import websockets
 
-from aider_agent.logger import LOG_CONFIG
-from aider_agent import utils
+from raider_backend.logger import LOG_CONFIG
+from raider_backend import utils
 
 # Initialize logging
 LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(

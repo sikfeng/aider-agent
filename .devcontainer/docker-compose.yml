@@ -1,4 +1,4 @@
-name: aider-agents
+name: raider-backend
 services:
   workspace:
     build:

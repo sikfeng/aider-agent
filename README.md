@@ -16,8 +16,8 @@ The Aider Agent system is designed to manage multiple agents that can perform va
 
 ## Directory Structure
 
-- `aider_agent/`: Main directory containing the core functionalities.
-  - `__init__.py`: Initializes the `aider_agent` package and configures the `litellm` library.
+- `raider_backend/`: Main directory containing the core functionalities.
+  - `__init__.py`: Initializes the `raider_backend` package and configures the `litellm` library.
   - `agent_manager.py`: Manages the overall process and agents.
   - `connection_manager.py`: Manages WebSocket connections and message buffering.
   - `external_repo_agent_handler.py`: Manages interactions with ExternalRepoAgent.
@@ -33,8 +33,8 @@ The Aider Agent system is designed to manage multiple agents that can perform va
 
 1. Clone the repository:
     ```sh
-    git clone https://github.com/sikfeng/aider-agent.git
-    cd aider-agent
+    git clone https://github.com/sikfeng/raider-backend.git
+    cd raider-backend
     ```
 
 2. Install the required dependencies:

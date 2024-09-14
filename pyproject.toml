@@ -3,7 +3,7 @@ requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aider_agent"
+name = "raider_backend"
 version = "0.0.1"
 description = "Autonomous Software Development"
 readme = "README.md"
@@ -13,12 +13,12 @@ dependencies = []
 [project.optional-dependencies]
 
 [project.urls]
-homepage = "https://github.com/sikfeng/aider-agent"
-repository = "https://github.com/sikfeng/aider-agent"
+homepage = "https://github.com/sikfeng/raider-backend"
+repository = "https://github.com/sikfeng/raider-backend"
 
 [project.scripts]
-init_repo_agent = "aider_agent.repo_agent:main"
-launch_endpoint = "aider_agent.launch:main"
+init_repo_agent = "raider_backend.repo_agent:main"
+launch_endpoint = "raider_backend.launch:main"
 
 [tool.setuptools.packages.find]
 where = ["."]

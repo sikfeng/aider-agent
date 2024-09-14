@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-docker buildx build --target aider-agent -t sikfeng/aider-agent -f docker/Dockerfile .
+docker buildx build --target raider-backend -t sikfeng/raider-backend -f docker/Dockerfile .

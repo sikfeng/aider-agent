@@ -21,4 +21,5 @@
     },
     "workspaceFolder": "/workspace",
     "postStartCommand": "/venv/bin/python -m pip install -e file:///workspace/aider-agent/."
+    //"postStartCommand": "/venv/bin/python -m pip install -e file:///workspace/raider-backend/."
 }

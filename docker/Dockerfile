@@ -32,7 +32,7 @@ RUN /venv/bin/python -m pip install --upgrade --no-cache-dir pip
 RUN /venv/bin/python -m pip install --no-cache-dir aider-chat[help,browser,playwright]==${AIDER_VERSION} --extra-index-url https://download.pytorch.org/whl/cpu
 RUN playwright install --with-deps chromium
 
-FROM aider AS aider-agent
+FROM aider AS raider-backend
 
 COPY requirements.txt /tmp
 RUN /venv/bin/python -m pip install --no-cache-dir -r /tmp/requirements.txt

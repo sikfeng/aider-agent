@@ -1,8 +1,8 @@
 """
-This module initializes the `aider_agent` package and configures the
+This module initializes the `raider_backend` package and configures the
 `litellm` library.
 
-The `aider_agent` package includes the following components:
+The `raider_backend` package includes the following components:
 - `AgentManager`: Manages different agents within the system.
 - `ConnectionManager`: Handles connections between agents and other
     components.
