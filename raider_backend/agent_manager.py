@@ -243,12 +243,12 @@ If you wish to edit a file, add the file to the chat.
 
             # Check for shell commands and files to add in the response
             def check_for_shell_cmds_in_response(
-                    aider_agent_response: str) -> Optional[List[str]]:
+                    aider_response: str) -> Optional[List[str]]:
                 """
                 Check if there are shell commands in the Aider agent
                 response.
 
-                :param aider_agent_response: The response from the
+                :param aider_response: The response from the
                     Aider agent.
                 :return: The shell command if found, otherwise None.
                 """
@@ -265,7 +265,7 @@ If you wish to edit a file, add the file to the chat.
                     re.DOTALL | re.IGNORECASE)
 
                 # Find all matches
-                matches = shell_code_pattern.findall(aider_agent_response)
+                matches = shell_code_pattern.findall(aider_response)
 
                 if not matches:
                     return None

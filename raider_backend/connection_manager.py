@@ -142,13 +142,9 @@ class ConnectionManager:
             await self.send_message(websocket, ConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
 
         elif method == "undo":
-            result = self.agent_managers[session_id].undo()
-            response = {"result": "Success" if result else "Failure"}
-            await self.send_message(websocket, response, session_id)
+            self.agent_managers[session_id].undo()
             await self.send_message(websocket, ConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
-            logger.info(
-                "undo_last_subtask result: %s",
-                response['result'])
+            logger.info("Undo command sent to Agent")
 
         elif method == "shutdown":
             self.agent_managers[session_id].shutdown()
