@@ -12,8 +12,9 @@ management tasks such as:
 """
 import argparse
 import logging
-from pathlib import Path
 from logging.config import dictConfig
+from pathlib import Path
+import os
 
 from fastapi import FastAPI
 import uvicorn
@@ -47,13 +48,19 @@ def main() -> None:
         type=str,
         help='Path to logfile',
         default="/tmp/manager.log")
+    parser.add_argument(
+        '--repo-dir',
+        type=str,
+        help='Directory of the main repository',
+        default=".")
     args = parser.parse_args()
+
+    args.repo_dir = utils.get_absolute_path(args.repo_dir)
+    os.chdir(args.repo_dir)
 
     LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(
         args.logfile)
     if Path(LOG_CONFIG['handlers']['fileHandler']['filename']).is_file():
-        # TODO: ask for user confirmation to overwrite logfile
-        # for now I will just overwrite it anyways
         Path(LOG_CONFIG['handlers']['fileHandler']['filename']).unlink()
     dictConfig(LOG_CONFIG)
 

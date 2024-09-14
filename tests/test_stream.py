@@ -58,7 +58,7 @@ async def test():
         logger.info("Running subtask: %s", subtask)
         await test_websocket_endpoint(uri, "run_subtask", {"subtask": subtask})
 
-    await test_websocket_endpoint(uri, "undo_last_subtask")
+    await test_websocket_endpoint(uri, "undo")
 
     logger.info("Shutting down")
     await test_websocket_endpoint(uri, "shutdown")

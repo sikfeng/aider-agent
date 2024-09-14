@@ -104,11 +104,11 @@ The system provides several WebSocket methods for interacting with the agents:
   - `run_subtask`: Runs a specified subtask.
     - **Params**: 
       - `subtask` (str): The subtask to run.
-  - `run_multiple_subtasks`: Confirms and runs a list of subtasks.
+  - `run_multiple_subtasks`: Runs a list of subtasks.
     - **Params**: 
       - `subtasks` (List[str]): The list of subtasks to run.
-  - `undo_last_subtask`: Undoes the last executed subtask.
-  - `shutdown`: Shuts down the system.
+  - `undo`: Undoes the last commit.
+  - `shutdown`: Shuts down the AgentManager.
 
 ### WebSocket Data Format
 

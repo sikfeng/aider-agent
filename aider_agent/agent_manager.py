@@ -191,12 +191,18 @@ class AgentManager:
 
         for repo_path in self.external_repo_agent_handlers:
             code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.', '')}.txt"
-            self.logger.info("Found %s.", code_snippet_filename)
-            try:
-                self.main_repo_agent.run(f"/read-only {code_snippet_filename}")
-            except BaseException:  # TODO: use a narrower exception type
+            if not Path(code_snippet_filename).is_file():
                 self.logger.warning(
                     "Did not find %s, skipping.", code_snippet_filename)
+                continue
+
+            self.logger.info("Found %s.", code_snippet_filename)
+            try:
+                self.main_repo_agent.commands.cmd_read_only(
+                    code_snippet_filename)
+            except BaseException:
+                self.logger.warning(
+                    "Error adding %s, skipping.", code_snippet_filename)
 
         completed_tasks = ""
 
@@ -286,27 +292,16 @@ If you wish to edit a file, add the file to the chat.
 
         self.completed_subtasks.append(subtask)
 
-    def undo_last_subtask(self) -> bool:
+    def undo(self) -> None:
         """
-        Undo the last completed subtask.
-
-        :return: True if the undo operation was successful, otherwise
-            False.
+        Undo the last commit made by Aider.
         """
-        if len(self.completed_subtasks) > 0:
-            self.completed_subtasks.pop()
-            # TODO: check if result was successful
-            result = self.main_repo_agent.run('/undo')
-            print(result)
-            return True
-
-        self.logger.warning("No previously completed subtasks.")
-        return False
+        self.main_repo_agent.undo()
 
     async def run_multiple_subtasks(
             self, subtasks: List[str]) -> AsyncGenerator[str, None]:
         """
-        Confirm and run the generated subtasks.
+        Run the subtasks.
 
         :param subtasks: The list of subtasks to run.
         :return: An async generator yielding parts of the response.

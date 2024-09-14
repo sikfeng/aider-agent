@@ -56,7 +56,13 @@ class BaseRepoAgent:
         :return: The result of processing the message.
         """
         try:
-            result = self.coder.run("/code " + msg)
+            self.coder = Coder.create(
+                io=self.coder.io,
+                from_coder=self.coder,
+                edit_format="code",
+                summarize_from_coder=False,
+            )
+            result = self.coder.run(msg)
             return str(result)
         except Exception as e:
             return f"error: failed due to {e}"
@@ -67,7 +73,13 @@ class BaseRepoAgent:
         :param msg: The message to process.
         :return: An async generator yielding parts of the response.
         """
-        for partial_response in self.coder.run_stream("/code " + msg):
+        self.coder = Coder.create(
+            io=self.coder.io,
+            from_coder=self.coder,
+            edit_format="code",
+            summarize_from_coder=False,
+        )
+        for partial_response in self.coder.run_stream(msg):
             yield partial_response
 
     def ask(self, msg: str) -> AsyncGenerator[str, None]:
@@ -76,20 +88,49 @@ class BaseRepoAgent:
         :param msg: The question to ask.
         :return: An async generator yielding parts of the response.
         """
-        return self.coder.run_stream("/ask " + msg)
+        self.coder = Coder.create(
+            io=self.coder.io,
+            from_coder=self.coder,
+            edit_format="ask",
+            summarize_from_coder=False,
+        )
+        return self.coder.run_stream(msg)
 
-    def reset(self) -> str:
+    def reset(self) -> None:
         """Reset the agent to its initial state.
 
         This method resets the internal state of the agent, clearing any
         accumulated context or data. It is useful for starting fresh without
         any prior context influencing the agent's behavior.
-
-        :return: The result of the reset operation.
         """
-        return self.run("/reset")
+        self.coder.commands.cmd_reset()
+
+    def undo(self) -> None:
+        """
+        Undo the last commit performed by the agent.
+
+        This method reverts the last commit made by the agent,
+        effectively undoing the most recent operation. It is useful for
+        correcting mistakes or reverting to a previous state.
+
+        Note: Aider does not programmatically return any result
+        indicating whether the undo operation was successful, hence we
+        are also unable to return anything useful.
+        """
+        # For some reason cmd_undo accepts a param `args` that is
+        # unused, with no default value either...
+        self.coder.commands.cmd_undo(None)
 
     def _get_repo_map(self) -> str:
+        """Retrieve the repository map without the content prefix..
+
+        This method retrieves the repository map, which is a representation
+        of the repository's structure and content. The map is used to
+        understand the layout and components of the repository, aiding in
+        various tasks such as code navigation and analysis.
+
+        :return: The repository map as a string.
+        """
         # Hack to remove the repomap prefix
         _tmp_prefix = self.coder.repo_map.repo_content_prefix
         self.coder.repo_map.repo_content_prefix = None
@@ -98,12 +139,20 @@ class BaseRepoAgent:
         return repo_map
 
     def get_repo_map(self) -> str:
-        """Get the repository map.
+        """
+        Retrieve the repository map.
 
-        This method retrieves the repository map, which is a representation
-        of the repository's structure and content. The map is used to
-        understand the layout and components of the repository, aiding in
-        various tasks such as code navigation and analysis.
+        This method is intended to be implemented by subclasses of
+        `BaseRepoAgent` to provide a repository map, which is a
+        representation of the repository's structure and content. The
+        implementation can vary based on the type of repository:
+
+        - For external repositories, which are not expected to be
+            modified, the repository map can be stored once and
+            retrieved directly without querying Aider repeatedly.
+        - For the main repository, which is expected to change
+            frequently, this method should query Aider each time to get
+            the most up-to-date repository map.
 
         :return: The repository map as a string.
         """
@@ -154,6 +203,8 @@ class MainRepoAgent(BaseRepoAgent):
 
 # Global agent instance
 agent: ExternalRepoAgent = None
+
+# TODO: move the routes into ExternalRepoAgent
 
 
 @app.post("/run")
