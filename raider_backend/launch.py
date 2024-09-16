@@ -37,11 +37,12 @@ def main() -> None:
     Main function to run the application.
     """
     parser = argparse.ArgumentParser(
-        description="Launch the AgentManager with a Websocket endpoint.")
+        description="Launch the AgentManager with a Websocket endpoint.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
         '--port',
         type=int,
-        help='Port of the agent',
+        help='Port of the websocket',
         default=10000)
     parser.add_argument(
         '--logfile',

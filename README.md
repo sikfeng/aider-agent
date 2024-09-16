@@ -54,6 +54,19 @@ To run the main application, execute:
 launch_endpoint
 ```
 
+The usage information is as follows:
+```
+usage: launch_endpoint [-h] [--port PORT] [--logfile LOGFILE] [--repo-dir REPO_DIR]
+
+Launch the AgentManager with a Websocket endpoint.
+
+options:
+  -h, --help           show this help message and exit
+  --port PORT          Port of the websocket (default: 10000)
+  --logfile LOGFILE    Path to logfile (default: /tmp/manager.log)
+  --repo-dir REPO_DIR  Directory of the main repository (default: .)
+```
+
 ### Running in a Devcontainer
 
 1. **Open the repository in Visual Studio Code**:
