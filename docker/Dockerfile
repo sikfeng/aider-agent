@@ -1,4 +1,4 @@
-FROM python:3.10-slim AS base
+FROM python:3.10-bookworm AS base
 
 RUN apt-get update && \
     apt-get install --no-install-recommends -y build-essential git libportaudio2 gnupg2 && \
