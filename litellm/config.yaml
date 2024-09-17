@@ -1,4 +1,4 @@
-model_list: 
+model_list:
   - model_name: gpt-4o
     litellm_params:
       model: azure/gpt-4o
