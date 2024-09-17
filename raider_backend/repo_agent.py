@@ -27,7 +27,7 @@ class BaseRepoAgent:
 
     def __init__(
             self,
-            model_name: str = "azure/gpt-4o",
+            model_name: str = "openai/gpt-4o",
             map_tokens: int = 8092) -> None:
         """Initialize the BaseRepoAgent.
 
@@ -178,7 +178,7 @@ class ExternalRepoAgent(BaseRepoAgent):
 
     def __init__(
             self,
-            model_name: str = "azure/gpt-4o",
+            model_name: str = "openai/gpt-4o",
             map_tokens: int = 8092) -> None:
         """Initialize the ExternalRepoAgent.
 
@@ -200,7 +200,7 @@ class MainRepoAgent(BaseRepoAgent):
 
     def __init__(
             self,
-            model_name: str = "azure/gpt-4o",
+            model_name: str = "openai/gpt-4o",
             map_tokens: int = 1024) -> None:
         """Initialize the MainRepoAgent.
 
@@ -289,7 +289,7 @@ def main() -> None:
         '--model-name',
         type=str,
         help='Name of the model to use',
-        default="azure/gpt-4o")
+        default="openai/gpt-4o")
     parser.add_argument(
         '--map-tokens',
         type=int,

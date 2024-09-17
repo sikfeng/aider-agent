@@ -31,6 +31,8 @@ app.add_api_websocket_route(
     "/ws/{session_id}",
     conn_manager.websocket_endpoint)
 
+os.environ["OPENAI_API_BASE"] = "http://0.0.0.0:4000"
+os.environ["OPENAI_API_KEY"] = "."
 
 def main() -> None:
     """

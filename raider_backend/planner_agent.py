@@ -20,7 +20,7 @@ class PlannerAgent:
 
     def __init__(
             self,
-            model_name: str = "azure/gpt-4o",
+            model_name: str = "openai/gpt-4o",
             map_tokens=8092,
             max_questions=5,
             max_subtasks=5,

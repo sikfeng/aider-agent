@@ -1,0 +1,33 @@
+model_list: 
+  - model_name: gpt-4o
+    litellm_params:
+      model: azure/gpt-4o
+      api_base: os.environ/AZURE_API_BASE
+      api_key: os.environ/AZURE_API_KEY
+      api_version: os.environ/AZURE_API_VERSION
+  - model_name: sonnet-3.5
+    litellm_params:
+      model: bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0
+  - model_name: llama-3.1-405b
+    litellm_params:
+      model: bedrock/meta.llama3-1-405b-instruct-v1:0
+  - model_name: sonnet-3
+    litellm_params:
+      model: bedrock/anthropic.claude-3-sonnet-20240229-v1:0
+  - model_name: opus-3
+    litellm_params:
+      model: bedrock/anthropic.claude-3-opus-20240229-v1:0
+  - model_name: mistral-large-2
+    litellm_params:
+      model: bedrock/mistral.mistral-large-2407-v1:0
+  - model_name: "*"
+    litellm_params:
+      model: "*"
+
+router_settings:
+  content_policy_fallbacks: [{"gpt-4o": ["sonnet-3.5"]}]
+  context_window_fallbacks: [{"gpt-4o": ["sonnet-3.5"]}]
+  fallbacks: [{"gpt-4o": ["sonnet-3.5"]}]
+
+litellm_settings:
+  drop_params: True

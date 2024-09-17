@@ -49,7 +49,7 @@ class ExternalRepoAgentHandler():
     def __init__(
             self,
             repo_dir: str,
-            model_name: str = "azure/gpt-4o",
+            model_name: str = "openai/gpt-4o",
             max_concurrent_llm_queries: int = 1,
             max_init_retry=5) -> None:
         """

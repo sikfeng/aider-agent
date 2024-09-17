@@ -33,7 +33,7 @@ class AgentManager:
     A class to manage the overall process and agents.
     """
 
-    def __init__(self, model_name: str = "azure/gpt-4o",
+    def __init__(self, model_name: str = "openai/gpt-4o",
                  max_reflections: int = 5,
                  max_concurrent_queries: int = 1) -> None:
         """
@@ -83,7 +83,7 @@ class AgentManager:
     def init_external_repo_agent(
             self,
             repo_dir: str,
-            model_name: str = "azure/gpt-4o") -> bool:
+            model_name: str = "openai/gpt-4o") -> bool:
         """
         Initialize an Aider agent.
 
@@ -122,7 +122,7 @@ class AgentManager:
                 "Failed to initialize an ExternalRepoAgent on %s.", repo_dir)
             return False
 
-    def init_main_repo_agent(self, model_name: str = "azure/gpt-4o") -> bool:
+    def init_main_repo_agent(self, model_name: str = "openai/sonnet-3.5") -> bool:
         """
         Initialize the main Aider agent.
 
@@ -137,7 +137,7 @@ class AgentManager:
             self.logger.error("MainRepoAgent failed to initialize: %s", str(e))
             return False
 
-    def init_planner_agent(self, model_name: str = "azure/gpt-4o") -> bool:
+    def init_planner_agent(self, model_name: str = "openai/gpt-4o") -> bool:
         """
         Initialize the Planner agent.
 
