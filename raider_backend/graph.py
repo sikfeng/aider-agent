@@ -2,9 +2,21 @@ import neo4j
 from neo4j import GraphDatabase
 from grep_ast import filename_to_lang
 from tree_sitter_languages import get_parser
+import re
+import logging
+from logging.config import dictConfig
 from . import utils
 import os
+from .logger import LOG_CONFIG
 
+# Initialize logging
+LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(
+    "/tmp/test_stream.log")
+dictConfig(LOG_CONFIG)
+logger = logging.getLogger("TestGraph")
+
+# Currently, I only have Neo4j community edition, which does not support multiple databases.
+# I could add multiple repositories and just search all of them together?
 
 class CodeGraph:
     # Graph Schema (https://www.arxiv.org/pdf/2408.03910)
@@ -83,13 +95,13 @@ MERGE (source)-[r:{edge_type} {{source_association_type: $source_association_typ
         self.model_name = model_name
         self.driver = GraphDatabase.driver(uri, auth=(user, password))
         self.driver.verify_connectivity() # Will throw exception if connection fails
-        with self.driver.session() as session:
-            session.run("""CREATE USER user IF NOT EXISTS
-            SET PLAINTEXT PASSWORD 'password'""")
-            #session.run("""GRANT ROLE reader to user""")
 
     def close(self):
         self.driver.close()
+
+    def reset(self):
+        with self.driver.session() as session:
+            session.run("MATCH (n) DETACH DELETE n")
 
     def create_node(self, params):
         query = CodeGraph.node_query_template.format(type=params["type"])
@@ -126,7 +138,6 @@ MERGE (source)-[r:{edge_type} {{source_association_type: $source_association_typ
     def send_query(self, query):
         # Note: the community edition of Neo4j does not support user roles, hence we must use the admin user to execute queries.
         # It is possible that it would perform "bad" queries, so we need to be careful.
-
         system_prompt = """
 # ROLE #
 You are a software developer maintaining a large project.
@@ -148,16 +159,10 @@ or missing nodes or edges resulting from indirect calls, dynamic behaviors, and 
 
 # SCHEMA OF THE CODE GRAPH DATABASE #
 {db_schema}
-
-# Notes For code generate:
-1. Any non-existent/not-found method/field/function is not allowed.
-2. No assumptions are allowed.
 """
         system_prompt = system_prompt.format(db_schema=CodeGraph.schema)
 
         user_prompt = """
-You are ready to do generate New Code. Please Answer Question:
-
 ### User's Requirements:
 <questions>
 {user_query}
@@ -205,9 +210,10 @@ Unpreferred Text Queries Examples:
     - The query is not informative and redundant.
 """
         user_prompt = user_prompt.format(user_query=query)
-        #response = utils.llm(self.model_name)(system_prompt=system_prompt, user_prompt=user_prompt)
-        #print(response)
-        #return
+        response = utils.llm(self.model_name)(system_prompt=system_prompt, user_prompt=user_prompt)
+        logger.info("Response: %s", response)
+        match = re.search(r"\[start_of_code_search\](.*?)\[end_of_code_search\]", response, re.DOTALL)
+        logger.info("Queries: %s", match.group(1))
         
         system_prompt = """
 # ROLE #
@@ -225,7 +231,7 @@ The code graph database is derived from static parsing of the project. You will 
 """
         user_prompt = f"""
 #### Text Queries:
-{query}
+{match.group(1)}
 """ + \
 """
 
@@ -283,9 +289,7 @@ MATCH (m:METHOD {name: 'yourMethodName'}) RETURN m.code
 """
         system_prompt = system_prompt.format(schema=CodeGraph.schema)
         response = utils.llm(self.model_name)(system_prompt=system_prompt, user_prompt=user_prompt)
-        #with self.driver.session() as session:
-        #    session.run(response)
-        print(response)
+        logger.info(response)
 
         def extract_cypher_queries(response):
             import re
@@ -317,17 +321,41 @@ MATCH (m:METHOD {name: 'yourMethodName'}) RETURN m.code
             return matches
         
         cypher_queries = extract_cypher_queries(response)
-        print(cypher_queries)
+        logger.info("Cypher queries: %s", cypher_queries)
 
+        cypher_results = []
         for cypher_query in cypher_queries:
             with self.driver.session() as session:
                 try:
-                    res = session.run(cypher_query)
-                    print(res.keys())
-                    for rec in res:
-                        print(rec)
+                    query_results = session.run(cypher_query)
+                    print(query_results.keys())
+                    for query_result in query_results:
+                        logger.debug("Query result: %s", query_result)
+                        cypher_results.append(query_result)
                 except neo4j.exceptions.CypherSyntaxError as e:
-                    print(str(e))
+                    logger.warning("Error parsing cypher query %s: %s", cypher_query, exc_info=True)
+        
+        logger.info("Cypher query results: %s", cypher_results)
+        if not cypher_results:
+            return
+        #return cypher_query_results
+
+        system_prompt = """
+You are an expert at interpreting the results of Cypher queries executed on a codebase knowledge graph. Given the following query result, generate a natural language summary that answers the user's original question.
+"""
+        # Complete prompt with user query and results
+        user_prompt = """
+Original Query: {query}
+
+Cypher Query: {cypher_queries}
+
+Cypher Result: {cypher_results}
+"""
+        user_prompt = user_prompt.format(query=query, cypher_queries=cypher_queries, cypher_results=str(cypher_results))
+        response = utils.llm(self.model_name)(system_prompt=system_prompt, user_prompt=user_prompt)
+        logger.info("Summary: %s", response)
+        return response
+
 
 class FileParser:
     @staticmethod
