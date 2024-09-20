@@ -10,7 +10,9 @@ import asyncio
 
 from . import utils
 from .prompts import PlannerAgentPrompts
-import raider_backend.agent_manager
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from raider_backend.agent_manager import AgentManager
 
 
 class PlannerAgent:
@@ -26,7 +28,7 @@ class PlannerAgent:
             max_subtasks=5,
             max_concurrent_llm_queries=1,
             max_reflections: int = 5,
-            agent_manager=None) -> None:
+            agent_manager: 'AgentManager' = None) -> None:
         """
         Initialize the PlannerAgent.
 
@@ -36,7 +38,7 @@ class PlannerAgent:
         self.model_name = model_name
         self.logger = logging.getLogger("PlannerAgent")
         self.map_tokens = map_tokens
-        self.agent_manager: raider_backend.AgentManager = agent_manager
+        self.agent_manager: 'AgentManager' = agent_manager
 
         self.max_questions = max_questions
         self.max_subtasks = max_subtasks
@@ -51,8 +53,6 @@ class PlannerAgent:
         :param objective: The main objective.
         :return: A dictionary containing the gathered information.
         """
-        # TODO: this is very messy instantiating multiple
-        # MainRepoAgents, can it be cleaner?
         repo_map = self.agent_manager.main_repo_agent.get_repo_map()
 
         self.logger.info("Repo Map: %s", repo_map)
@@ -137,20 +137,18 @@ class PlannerAgent:
         :param objective: The main objective.
         :return: A list of subtasks.
         """
-        #'''
         # Restate the problem statement
         system_prompt = """
-        You are a requirements analyst tasked with converting objectives into clear, actionable instructions for a software developer.
-        Your instructions should be specific, technically accurate, and detailed enough for implementation. 
-        Ensure to outline any necessary steps, constraints, and considerations for the development process.
-        """
+You are a requirements analyst tasked with converting objectives into clear, actionable instructions for a software developer.
+Your instructions should be specific, technically accurate, and detailed enough for implementation. 
+Ensure to outline any necessary steps, constraints, and considerations for the development process.
+"""
         user_prompt = """{objective}"""
         user_prompt = user_prompt.format(objective=objective)
         objective = utils.llm(self.model_name)(
             system_prompt=system_prompt, user_prompt=user_prompt
         )
         self.logger.info("Restated objective: %s", objective)
-        #'''
 
         # Gather necessary information
         gathered_info_summary = await self.gather_information(objective)

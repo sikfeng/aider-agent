@@ -18,7 +18,10 @@ from fastapi.responses import StreamingResponse
 import litellm
 import uvicorn
 
-import raider_backend.agent_manager
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from raider_backend.agent_manager import AgentManager
 
 # Suppress debug information from litellm
 litellm.suppress_debug_info = True
@@ -209,7 +212,7 @@ class MainRepoAgent(BaseRepoAgent):
             model_name: str = "azure/gpt-4o", # Get strong and weak model
             map_tokens: int = 1024,
             max_reflections: int = 5,
-            agent_manager: raider_backend.agent_manager.AgentManager = None) -> None:
+            agent_manager: 'AgentManager' = None) -> None:
         """Initialize the MainRepoAgent.
 
         :param model_name: The name of the model to use.
@@ -436,3 +439,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+# Import AgentManager at the end to avoid circular imports
+from raider_backend.agent_manager import AgentManager
