@@ -144,6 +144,13 @@ class BaseRepoAgent:
         """
         self.coder.commands.cmd_commit()
 
+    def change_model(self, model_name):
+        """
+        Change the model used by the agent.
+        """
+        self.model = Model(model_name)
+        self.coder = Coder.create(from_coder=self.coder, main_model=self.model)
+
     def _get_repo_map(self) -> str:
         """Retrieve the repository map without the content prefix..
 
@@ -236,6 +243,7 @@ class MainRepoAgent(BaseRepoAgent):
         :param subtask: The subtask to run.
         :return: An async generator yielding parts of the response.
         """
+        self.change_model("azure/gpt-4o") # TODO: Config this to strong model
         self.logger.info("Starting to run %s.", subtask)
         self.logger.info("Querying ExternalRepoAgentHandlers.")
         await asyncio.gather(*(external_repo_agent.find_relevant_code(subtask)

@@ -79,6 +79,7 @@ class PlannerAgent:
         self.logger.info("Questions: %s", questions)
 
         async def ask_aider(question: str) -> str:
+            self.agent_manager.main_repo_agent.change_model("bedrock/meta.llama3-1-405b-instruct-v1:0")
             query_message = PlannerAgentPrompts.AIDER_QUERY_QUESTION.format(
                 question=question)
             response = ""
