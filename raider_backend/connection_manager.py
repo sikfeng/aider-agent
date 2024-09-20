@@ -46,7 +46,8 @@ class ConnectionManager:
         self.active_connections.append(websocket)
         logger.info("WebSocket connection accepted")
 
-        self.agent_managers[session_id] = AgentManager()
+        if self.agent_managers.get(session_id) is None:
+            self.agent_managers[session_id] = AgentManager()
 
     async def _on_disconnect(self, websocket: WebSocket) -> None:
         """
@@ -150,8 +151,9 @@ class ConnectionManager:
             self.agent_managers[session_id].shutdown()
             await self.send_message(websocket, {"result": "shutdown"}, session_id)
             await self.send_message(websocket, ConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
+            self.agent_managers.pop(session_id)
             logger.info("Shutdown initiated")
-            os.kill(os.getpid(), signal.SIGTERM)
+            #os.kill(os.getpid(), signal.SIGTERM)
 
     async def send_message(self, websocket: WebSocket,
                            message: Dict[str, Any], session_id: str) -> None:

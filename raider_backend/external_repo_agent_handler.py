@@ -51,7 +51,8 @@ class ExternalRepoAgentHandler():
             repo_dir: str,
             model_name: str = "azure/gpt-4o",
             max_concurrent_llm_queries: int = 1,
-            max_init_retry=5) -> None:
+            max_init_retry=5,
+            agent_manager=None) -> None:
         """
         Initialize the AiderAgent.
 
@@ -59,6 +60,7 @@ class ExternalRepoAgentHandler():
         :param repo_dir: The directory of the repository.
         :param max_concurrent_llm_queries: The maximum number of
             concurrent LLM queries.
+        :param agent_manager: The AgentManager instance.
         """
 
         if not Path(repo_dir).is_dir():
@@ -73,6 +75,7 @@ class ExternalRepoAgentHandler():
         self.logger = logging.getLogger(
             f"ExternalRepoAgent: {self.repo_dir}")
         self.model_name = model_name
+        self.agent_manager = agent_manager
         # TODO: assert that this value is sensible
         self.max_concurrent_llm_queries = max_concurrent_llm_queries
         self.code_snippet_filename = utils.get_absolute_path(

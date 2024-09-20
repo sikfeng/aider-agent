@@ -4,7 +4,11 @@ It provides a FastAPI-based web service to handle various operations such as run
 and retrieving repository maps.
 """
 import argparse
-from typing import AsyncGenerator
+import asyncio
+import logging
+from pathlib import Path
+import re
+from typing import AsyncGenerator, Optional, List
 
 from aider.coders import Coder
 from aider.models import Model
@@ -13,6 +17,8 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 import litellm
 import uvicorn
+
+import raider_backend.agent_manager
 
 # Suppress debug information from litellm
 litellm.suppress_debug_info = True
@@ -200,20 +206,143 @@ class MainRepoAgent(BaseRepoAgent):
 
     def __init__(
             self,
-            model_name: str = "azure/gpt-4o",
-            map_tokens: int = 1024) -> None:
+            model_name: str = "azure/gpt-4o", # Get strong and weak model
+            map_tokens: int = 1024,
+            max_reflections: int = 5,
+            agent_manager: raider_backend.agent_manager.AgentManager = None) -> None:
         """Initialize the MainRepoAgent.
 
         :param model_name: The name of the model to use.
         :param map_tokens: Maximum number of tokens for the repo map.
+        :param agent_manager: The AgentManager instance.
         """
         super().__init__(model_name=model_name, map_tokens=map_tokens)
+        self.agent_manager = agent_manager
+        self.max_reflections = max_reflections
+        self.logger = logging.getLogger("MainRepoAgent")
 
     def get_repo_map(self) -> str:
         # Expected that the main repo will keep updating
         repo_map = self._get_repo_map()
         return repo_map
+    
+    async def run_subtask(self, subtask: str) -> AsyncGenerator[str, None]:
+        """
+        Run a subtask using the main Aider agent.
 
+        :param subtask: The subtask to run.
+        :return: An async generator yielding parts of the response.
+        """
+        self.logger.info("Starting to run %s.", subtask)
+        self.logger.info("Querying ExternalRepoAgentHandlers.")
+        await asyncio.gather(*(external_repo_agent.find_relevant_code(subtask)
+                               for external_repo_agent
+                               in self.agent_manager.external_repo_agent_handlers.values()))
+
+        for repo_path in self.agent_manager.external_repo_agent_handlers:
+            code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.', '')}.txt"
+            if not Path(code_snippet_filename).is_file():
+                self.logger.warning(
+                    "Did not find %s, skipping.", code_snippet_filename)
+                continue
+
+            self.logger.info("Found %s.", code_snippet_filename)
+            try:
+                self.coder.commands.cmd_read_only(
+                    code_snippet_filename)
+            except BaseException:
+                self.logger.warning(
+                    "Error adding %s, skipping.", code_snippet_filename)
+
+        # TODO: I dont like to rely on past completed tasks. I plan to remove this in the future
+        completed_tasks = ""
+
+        if self.agent_manager.completed_subtasks:
+            completed_tasks = "These are the tasks that you have already completed:\n"
+            completed_tasks += "\n".join(
+                [f"{j+1}: {t}" for j,
+                 t in enumerate(self.agent_manager.completed_subtasks)]
+            )
+
+        message = ""
+        if self.agent_manager.completed_subtasks:
+            message = f"""{completed_tasks}
+
+Based on the above completed tasks, you are to complete the following task:
+{subtask}
+
+If the files you wish to write to do not exist yet, automatically create them.
+"""
+        else:
+            message = f"""{completed_tasks}
+
+You are to complete the following task:
+{subtask}
+
+If the files you wish to write to do not exist yet, automatically create them.
+If you wish to edit a file, add the file to the chat.
+"""
+        response = ""
+        for _ in range(self.max_reflections):
+            curr_response = ""
+            self.logger.debug("Message: %s", message)
+            async for partial_response in self.run_stream(message):
+                curr_response += partial_response
+                yield partial_response
+
+            response += curr_response
+
+            # Check for shell commands and files to add in the response
+            def check_for_shell_cmds_in_response(
+                    aider_response: str) -> Optional[List[str]]:
+                """
+                Check if there are shell commands in the Aider agent
+                response.
+
+                :param aider_response: The response from the
+                    Aider agent.
+                :return: The shell command if found, otherwise None.
+                """
+                # List of shell code block markers
+                shell_markers = [
+                    "bash", "sh", "shell", "cmd", "batch", "powershell", "ps1",
+                    "zsh", "fish", "ksh", "csh", "tcsh"
+                ]
+
+                # Create a regex pattern to match any of the shell code block
+                # markers
+                shell_code_pattern = re.compile(
+                    r'```(?:' + '|'.join(shell_markers) + r')(.*?)```',
+                    re.DOTALL | re.IGNORECASE)
+
+                # Find all matches
+                matches = shell_code_pattern.findall(aider_response)
+
+                if not matches:
+                    return None
+
+                return matches
+
+            # Check for shell commands and files to add in the response
+            shell_cmds = check_for_shell_cmds_in_response(curr_response)
+            self.logger.debug("Found shell commands %s", shell_cmds)
+
+            if shell_cmds is not None:
+                for command in shell_cmds:
+                    yield f"\n<suggested_cmd>{command}</suggested_cmd>\n"
+                    # Optionally, you can execute the command here if needed
+                    # cmd_response = self.main_repo_agent.run_cmd(command)
+                    # yield f"<cmd_response>{cmd_response}</cmd_response>"
+
+            # Use the new function to find files to add
+
+            if self.coder.reflected_message is None:
+                break
+
+            message = self.coder.reflected_message
+
+        self.commit()
+        self.agent_manager.completed_subtasks.append(subtask)
 
 # Global agent instance
 agent: ExternalRepoAgent = None
