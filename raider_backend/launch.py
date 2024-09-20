@@ -20,10 +20,10 @@ from fastapi import FastAPI
 import uvicorn
 
 from . import utils
-from .connection_manager import ConnectionManager
+from .connection_manager import LaunchConnectionManager
 from .logger import LOG_CONFIG
 
-conn_manager = ConnectionManager()
+conn_manager = LaunchConnectionManager()
 
 logger = logging.getLogger("WebSocketEndpoint")
 app = FastAPI()
