@@ -49,15 +49,7 @@ def main() -> None:
         type=str,
         help='Path to logfile',
         default="/tmp/manager.log")
-    parser.add_argument(
-        '--repo-dir',
-        type=str,
-        help='Directory of the main repository',
-        default=".")
     args = parser.parse_args()
-
-    args.repo_dir = utils.get_absolute_path(args.repo_dir)
-    os.chdir(args.repo_dir)
 
     LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(
         args.logfile)

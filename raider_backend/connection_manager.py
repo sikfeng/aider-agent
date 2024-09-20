@@ -17,8 +17,7 @@ from typing import Any, Dict, List
 from fastapi import WebSocket, WebSocketDisconnect
 
 from .agent_manager import AgentManager
-
-logger = logging.getLogger("ConnectionManager")
+from .agent_manager_handler import AgentManagerHandler
 
 
 class ConnectionManager(ABC):
@@ -34,6 +33,7 @@ class ConnectionManager(ABC):
         """
         self.active_connections: List[WebSocket] = []
         self.message_buffer: Dict[str, List[Dict[str, Any]]] = {}
+        self.logger = logging.getLogger(__name__)
 
     async def _on_connect(self, websocket: WebSocket, session_id: str) -> None:
         """
@@ -44,10 +44,7 @@ class ConnectionManager(ABC):
         """
         await websocket.accept()
         self.active_connections.append(websocket)
-        logger.info("WebSocket connection accepted")
-
-        if self.agent_managers.get(session_id) is None:
-            self.agent_managers[session_id] = AgentManager()
+        self.logger.info("WebSocket connection accepted")
 
     async def _on_disconnect(self, websocket: WebSocket) -> None:
         """
@@ -57,7 +54,7 @@ class ConnectionManager(ABC):
         :param websocket: The WebSocket connection to remove.
         """
         self.active_connections.remove(websocket)
-        logger.info("Client disconnected")
+        self.logger.info("Client disconnected")
 
     @abstractmethod
     async def _on_receive(self, websocket: WebSocket,
@@ -78,7 +75,7 @@ class ConnectionManager(ABC):
             await websocket.send_json(message)
         except WebSocketDisconnect:
             self.message_buffer[session_id].append(message)
-            logger.warning("Message buffered due to disconnection")
+            self.logger.warning("Message buffered due to disconnection")
 
     async def send_buffered_messages(
             self,
@@ -96,7 +93,7 @@ class ConnectionManager(ABC):
         while self.message_buffer[session_id]:
             buffered_message = self.message_buffer[session_id].pop(0)
             await self.send_message(websocket, buffered_message, session_id)
-            logger.info("Sent buffered message: %s", buffered_message)
+            self.logger.info("Sent buffered message: %s", buffered_message)
 
     async def send_keepalive_pings(
             self,
@@ -112,7 +109,7 @@ class ConnectionManager(ABC):
         while True:
             await asyncio.sleep(10)  # Adjust the interval as needed
             await self.send_message(websocket, {"ping": "keepalive"}, session_id)
-            logger.debug("Sent keepalive ping")
+            self.logger.debug("Sent keepalive ping")
 
     async def websocket_endpoint(
             self,
@@ -141,20 +138,20 @@ class ConnectionManager(ABC):
 
             while True:
                 data = await websocket.receive_json()
-                logger.info("Received data: %s", data)
+                self.logger.info("Received data: %s", data)
                 await self._on_receive(websocket, session_id, data)
 
         except WebSocketDisconnect:
             await self._on_disconnect(websocket)
         finally:
             keepalive_task.cancel()
-            logger.info("Keepalive task cancelled")
+            self.logger.info("Keepalive task cancelled")
 
 
 class LaunchConnectionManager(ConnectionManager):
     def __init__(self) -> None:
         super().__init__()
-        self.agent_managers: Dict[str, AgentManager] = {}
+        self.agent_manager_handler: AgentManagerHandler = AgentManagerHandler()
 
     async def _on_receive(self, websocket: WebSocket,
                           session_id: str, data: Dict[str, Any]) -> None:
@@ -167,87 +164,80 @@ class LaunchConnectionManager(ConnectionManager):
         :param session_id: The session identifier for the connection.
         :param data: The data received from the WebSocket connection.
             The expected format of the `data` parameter is a dictionary
-            with at least two keys: `method` and `params`.
-
-        methods:
-            - init_external_repo_agent: Initialize an external
-                repository agent.
-            - get_external_repo_agents: Retrieve a list of external
-                repository agents.
-            - generate_subtasks: Generate subtasks based on an
-                objective.
-            - finetune_subtasks: Fine-tune subtasks based on an
-                objective and instruction.
-            - run_subtask: Run a specific subtask.
-            - run_multiple_subtasks: Run multiple subtasks.
-            - undo: Undo the last commit made by Aider.
-            - shutdown: Shutdown the agent manager.
-
+            with at least three keys: `main_repo_dir`, `method` and `params`.
         """
+        main_repo_dir = data.get("main_repo_dir")
         method = data.get("method")
         params = data.get("params", {})
 
+        response = await self.agent_manager_handler.handle_message(
+            session_id=session_id, main_repo_dir=main_repo_dir, method=method, params=params)
+        response = {"result": response}
+        await self.send_message(websocket, response, session_id)
+        await self.send_message(websocket, ConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
+
+
+class AgentManagerConnectionManager(ConnectionManager):
+    def __init__(self) -> None:
+        super().__init__()
+        self.agent_managers: Dict[str, AgentManager] = {}
+
+    async def _on_connect(self, websocket: WebSocket, session_id: str) -> None:
+        await super()._on_connect(websocket, session_id)
+        if self.agent_managers.get(session_id) is None:
+            self.agent_managers[session_id] = AgentManager()
+            self.logger.info(
+                "Initialized AgentManager with session ID %s", session_id)
+
+    async def _on_receive(self, websocket: WebSocket, session_id: str, data: Dict[str, Any]) -> None:
+        method = data.get("method")
+        params = data.get("params", {})
+
+        agent_manager = self.agent_managers[session_id]
+
         if method == "init_external_repo_agent":
             repo_dir = params.get("repo_dir")
-            result = self.agent_managers[session_id].init_external_repo_agent(
-                repo_dir)
+            model_name = params.get("model_name", "azure/gpt-4o")
+            result = agent_manager.init_external_repo_agent(
+                repo_dir, model_name)
             response = {"result": "Success" if result else "Failure"}
             await self.send_message(websocket, response, session_id)
-            await self.send_message(websocket, ConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
-            logger.info(
-                "init_external_repo_agent result: %s",
-                response['result'])
 
         elif method == "get_external_repo_agents":
-            agents = str(
-                self.agent_managers[session_id].get_external_repo_agents())
+            agents = json.dumps(agent_manager.get_external_repo_agents())
             response = {"result": agents}
             await self.send_message(websocket, response, session_id)
-            await self.send_message(websocket, ConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
-            logger.info("get_external_repo_agents result: %s", agents)
 
         elif method == "generate_subtasks":
             objective = params.get("objective")
-            subtasks = json.dumps(await self.agent_managers[session_id].generate_subtasks(objective))
+            subtasks = json.dumps(await agent_manager.generate_subtasks(objective))
             response = {"result": subtasks}
             await self.send_message(websocket, response, session_id)
-            await self.send_message(websocket, ConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
-            logger.info("generate_subtasks result: %s", subtasks)
-
-        elif method == "finetune_subtasks":
-            objective = params.get("objective")
-            instruction = params.get("instruction")
-            subtasks = self.agent_managers[session_id].finetune_subtasks(
-                objective, instruction)
-            response = {"result": subtasks}
-            await self.send_message(websocket, response, session_id)
-            await self.send_message(websocket, ConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
-            logger.info("finetune_subtasks result: %s", subtasks)
 
         elif method == "run_subtask":
             subtask = params.get("subtask")
-            async for response in self.agent_managers[session_id].run_subtask(subtask):
+            async for response in agent_manager.run_subtask(subtask):
                 await self.send_message(websocket, {"result": response}, session_id)
-                logger.info("run_subtask response: %s", response)
-            await self.send_message(websocket, ConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
 
         elif method == "run_multiple_subtasks":
             subtasks = params.get("subtasks")
-            async for response in self.agent_managers[session_id].run_multiple_subtasks(subtasks):
+            async for response in agent_manager.run_multiple_subtasks(subtasks):
                 await self.send_message(websocket, {"result": response}, session_id)
-                logger.info(
-                    "run_multiple_subtasks response: %s", response)
-            await self.send_message(websocket, ConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
 
         elif method == "undo":
-            self.agent_managers[session_id].undo()
-            await self.send_message(websocket, ConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
-            logger.info("Undo command sent to Agent")
+            agent_manager.undo()
+            await self.send_message(websocket, {"result": "Undo completed"}, session_id)
 
         elif method == "shutdown":
-            self.agent_managers[session_id].shutdown()
-            await self.send_message(websocket, {"result": "shutdown"}, session_id)
-            await self.send_message(websocket, ConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
+            result = agent_manager.shutdown()
+            await self.send_message(websocket, {"result": result}, session_id)
             self.agent_managers.pop(session_id)
-            logger.info("Shutdown initiated")
-            #os.kill(os.getpid(), signal.SIGTERM)
+
+        else:
+            await self.send_message(websocket, {"error": f"Unknown method: {method}"}, session_id)
+
+        await self.send_message(websocket, self.END_OF_MESSAGE_RESPONSE, session_id)
+
+    def ping(self) -> str:
+        result = "pong"
+        return result

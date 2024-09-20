@@ -12,14 +12,16 @@ import os
 from pathlib import Path
 import platform
 from typing import AsyncGenerator, List, Dict, Optional, Any
+import argparse
 
 from distro import name as distro_name
 import litellm
+from fastapi import FastAPI
+import uvicorn
 
 from . import utils
 from .external_repo_agent_handler import ExternalRepoAgentHandler, InitExternalRepoAgentError
 from .planner_agent import PlannerAgent
-#from .repo_agent import MainRepoAgent
 import raider_backend.repo_agent
 
 litellm.drop_params = True
@@ -129,7 +131,8 @@ class AgentManager:
         :return: True if the agent is initialized, otherwise False.
         """
         try:
-            self.main_repo_agent = raider_backend.MainRepoAgent(model_name=model_name, agent_manager=self)
+            self.main_repo_agent = raider_backend.MainRepoAgent(
+                model_name=model_name, agent_manager=self)
             self.logger.info("MainRepoAgent successfully initialized.")
             return True
         except BaseException as e:
@@ -247,10 +250,41 @@ class AgentManager:
             raise ValueError(f"Agent {agent_name} is not initialized")
 
         if not hasattr(agent, function_name):
-            raise AttributeError(f"Function {function_name} not found in agent {agent_name}")
+            raise AttributeError(
+                f"Function {function_name} not found in agent {agent_name}")
 
         func = getattr(agent, function_name)
         if not callable(func):
-            raise AttributeError(f"{function_name} is not a callable function in agent {agent_name}")
+            raise AttributeError(
+                f"{function_name} is not a callable function in agent {agent_name}")
 
         return await func(**params)
+
+
+def main():
+    from .connection_manager import AgentManagerConnectionManager
+    conn_manager = AgentManagerConnectionManager()
+
+    app = FastAPI()
+    app.add_api_websocket_route(
+        "/ws/{session_id}", conn_manager.websocket_endpoint)
+    app.add_api_route("/ping", conn_manager.ping)
+
+    parser = argparse.ArgumentParser(
+        description="Run AgentManager with FastAPI WebSocket")
+    parser.add_argument("--port", type=int, default=8000,
+                        help="Port for the FastAPI server")
+    parser.add_argument("--main-repo-dir", type=str,
+                        help="Main repository directory")
+    parser.add_argument("--model-name", type=str, default="azure/gpt-4o",
+                        help="Model name for the AgentManager")
+    args = parser.parse_args()
+
+    args.main_repo_dir = utils.get_absolute_path(args.main_repo_dir)
+    os.chdir(args.main_repo_dir)
+
+    uvicorn.run(app, host="0.0.0.0", port=args.port)
+
+
+if __name__ == "__main__":
+    main()

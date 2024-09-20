@@ -3,6 +3,7 @@ This module defines classes and functions to manage repository agents that inter
 It provides a FastAPI-based web service to handle various operations such as running code, asking questions,
 and retrieving repository maps.
 """
+from raider_backend.agent_manager import AgentManager
 import argparse
 import asyncio
 import logging
@@ -154,6 +155,9 @@ class BaseRepoAgent:
 
         :return: The repository map as a string.
         """
+        # if not self.coder.repo_map:
+        #    return None
+
         # Hack to remove the repomap prefix
         _tmp_prefix = self.coder.repo_map.repo_content_prefix
         self.coder.repo_map.repo_content_prefix = None
@@ -209,7 +213,7 @@ class MainRepoAgent(BaseRepoAgent):
 
     def __init__(
             self,
-            model_name: str = "azure/gpt-4o", # Get strong and weak model
+            model_name: str = "azure/gpt-4o",  # Get strong and weak model
             map_tokens: int = 1024,
             max_reflections: int = 5,
             agent_manager: 'AgentManager' = None) -> None:
@@ -228,7 +232,7 @@ class MainRepoAgent(BaseRepoAgent):
         # Expected that the main repo will keep updating
         repo_map = self._get_repo_map()
         return repo_map
-    
+
     async def run_subtask(self, subtask: str) -> AsyncGenerator[str, None]:
         """
         Run a subtask using the main Aider agent.
@@ -347,6 +351,7 @@ If you wish to edit a file, add the file to the chat.
         self.commit()
         self.agent_manager.completed_subtasks.append(subtask)
 
+
 # Global agent instance
 agent: ExternalRepoAgent = None
 
@@ -441,4 +446,3 @@ if __name__ == "__main__":
     main()
 
 # Import AgentManager at the end to avoid circular imports
-from raider_backend.agent_manager import AgentManager

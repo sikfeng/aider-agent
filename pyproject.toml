@@ -17,6 +17,7 @@ homepage = "https://github.com/sikfeng/raider-backend"
 repository = "https://github.com/sikfeng/raider-backend"
 
 [project.scripts]
+init_agent_manager = "raider_backend.agent_manager:main"
 init_repo_agent = "raider_backend.repo_agent:main"
 launch_endpoint = "raider_backend.launch:main"
 
