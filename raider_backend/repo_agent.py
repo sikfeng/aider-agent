@@ -16,18 +16,12 @@ from aider.models import Model
 from aider.io import InputOutput
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-import litellm
 import uvicorn
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from raider_backend.agent_manager import AgentManager
-
-# Suppress debug information from litellm
-litellm.suppress_debug_info = True
-litellm.set_verbose = False
-litellm.drop_params = True
 
 app = FastAPI()
 
@@ -47,6 +41,18 @@ class BaseRepoAgent:
         self.model_name = model_name
         self.model = Model(model_name)
         self.map_tokens = map_tokens
+        self.logger = logging.getLogger(self.__class__.__name__)
+
+        current_path = Path(".").resolve()
+        try:
+            from git import Repo
+            repo = Repo(current_path, search_parent_directories=True)
+            self.logger.debug("Git repo already initialized.")
+        except:
+            repo = Repo.init(current_path)
+            self.logger.info("Git repo initialized.")
+            repo.index.add("*")
+            self.logger.info("Added all files to tracking.")
 
         self.io = InputOutput(
             pretty=False,
@@ -226,7 +232,6 @@ class MainRepoAgent(BaseRepoAgent):
         super().__init__(model_name=model_name, map_tokens=map_tokens)
         self.agent_manager = agent_manager
         self.max_reflections = max_reflections
-        self.logger = logging.getLogger("MainRepoAgent")
 
     def get_repo_map(self) -> str:
         # Expected that the main repo will keep updating

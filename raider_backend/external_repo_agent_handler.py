@@ -51,7 +51,8 @@ class ExternalRepoAgentHandler():
             repo_dir: str,
             model_name: str = "azure/gpt-4o",
             max_concurrent_llm_queries: int = 1,
-            max_init_retry=5,
+            max_init_retry=3,
+            timeout=10,
             agent_manager=None) -> None:
         """
         Initialize the AiderAgent.
@@ -108,7 +109,7 @@ class ExternalRepoAgentHandler():
                  f"--model-name {model_name}"),
                 cwd=self.repo_dir,
                 shell=True)
-            ping_success = self.wait_for_ping()
+            ping_success = self.wait_for_ping(timeout=timeout)
             if ping_success:
                 self.logger.info(
                     ("Aider instance on port %s returned ping, successfully "
@@ -130,7 +131,7 @@ class ExternalRepoAgentHandler():
             raise InitExternalRepoAgentError(
                 f"Failed to initialize ExternalRepoAgent on {self.repo_dir}.")
 
-    def wait_for_ping(self) -> bool:
+    def wait_for_ping(self, timeout) -> bool:
         """
         Wait for the Aider agent to respond with "pong" to a ping
         request.
@@ -139,7 +140,7 @@ class ExternalRepoAgentHandler():
             timeout is reached.
         """
         self.logger.info("Waiting for ping response.")
-        timeout = 6  # TODO: set as class variable
+        timeout = timeout
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:

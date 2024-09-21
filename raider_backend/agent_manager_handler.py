@@ -19,6 +19,7 @@ class AgentManagerHandler:
     def __init__(self):
         self.agent_manager_subprocesses: Dict[str, subprocess.Popen] = {}
         self.agent_manager_ports: Dict[str, int] = {}
+        self.logger = logging.getLogger(self.__class__.__name__)
 
     def init_agent_manager(self,
                            max_init_retry: int = 5,
