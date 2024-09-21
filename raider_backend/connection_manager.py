@@ -198,6 +198,7 @@ class AgentManagerConnectionManager(ConnectionManager):
         if method == "init_external_repo_agent":
             repo_dir = params.get("repo_dir")
             model_name = params.get("model_name", "azure/gpt-4o")
+            model_name = params.get("timeout", 10)
             result = agent_manager.init_external_repo_agent(
                 repo_dir, model_name)
             response = {"result": "Success" if result else "Failure"}

@@ -84,7 +84,8 @@ class AgentManager:
     def init_external_repo_agent(
             self,
             repo_dir: str,
-            model_name: str = "azure/gpt-4o") -> bool:
+            model_name: str = "azure/gpt-4o",
+            timeout: int = 10) -> bool:
         """
         Initialize an Aider agent.
 
@@ -112,7 +113,10 @@ class AgentManager:
 
         try:
             agent = ExternalRepoAgentHandler(
-                model_name=model_name, repo_dir=repo_dir, agent_manager=self)
+                model_name=model_name,
+                repo_dir=repo_dir,
+                agent_manager=self,
+                timeout=timeout)
             self.external_repo_agent_handlers[repo_dir] = agent
             self.logger.info(
                 "Successfully initialized an ExternalRepoAgent on %s.",
