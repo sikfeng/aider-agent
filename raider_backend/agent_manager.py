@@ -20,7 +20,7 @@ from fastapi import FastAPI
 import uvicorn
 
 from . import utils
-from .external_repo_agent_handler import ExternalRepoAgentHandler, InitExternalRepoAgentError
+from .handlers.external_repo_agent_handler import ExternalRepoAgentHandler, InitExternalRepoAgentError
 from .planner_agent import PlannerAgent
 import raider_backend.repo_agent
 
@@ -135,7 +135,7 @@ class AgentManager:
         :return: True if the agent is initialized, otherwise False.
         """
         try:
-            self.main_repo_agent = raider_backend.MainRepoAgent(
+            self.main_repo_agent = raider_backend.repo_agent.MainRepoAgent(
                 model_name=model_name, agent_manager=self)
             self.logger.info("MainRepoAgent successfully initialized.")
             return True

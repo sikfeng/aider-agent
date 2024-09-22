@@ -17,7 +17,7 @@ from typing import Any, Dict, List
 from fastapi import WebSocket, WebSocketDisconnect
 
 from .agent_manager import AgentManager
-from .agent_manager_handler import AgentManagerHandler
+from .handlers.agent_manager_handler import AgentManagerHandler
 
 
 class ConnectionManager(ABC):

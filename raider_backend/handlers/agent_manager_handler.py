@@ -8,7 +8,7 @@ import websockets
 
 import httpx
 
-from . import utils
+from raider_backend import utils
 from .base_handler import BaseHandler
 
 

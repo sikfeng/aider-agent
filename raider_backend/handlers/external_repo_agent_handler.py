@@ -4,9 +4,9 @@ from typing import AsyncGenerator
 
 import httpx
 
-from . import utils
-from . import parse
-from .prompts import ExternalRepoAgentHandlerPrompts
+from raider_backend import utils
+from raider_backend import parse
+from raider_backend.prompts import ExternalRepoAgentHandlerPrompts
 from .base_handler import BaseHandler
 
 
