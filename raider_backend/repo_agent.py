@@ -1,14 +1,10 @@
-"""
-This module defines classes and functions to manage repository agents that interact with the Aider system.
-It provides a FastAPI-based web service to handle various operations such as running code, asking questions,
-and retrieving repository maps.
-"""
 import argparse
 import asyncio
 import logging
 from pathlib import Path
 import re
 from typing import AsyncGenerator, Optional, List
+from typing import TYPE_CHECKING
 
 from aider.coders import Coder
 from aider.models import Model
@@ -17,7 +13,8 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 import uvicorn
 
-from typing import TYPE_CHECKING
+
+from raider_backend.connection_managers.repo_agent_connection_manager import RepoAgentConnectionManager
 
 if TYPE_CHECKING:
     from raider_backend.agent_manager import AgentManager
@@ -160,9 +157,6 @@ class BaseRepoAgent:
 
         :return: The repository map as a string.
         """
-        # if not self.coder.repo_map:
-        #    return None
-
         # Hack to remove the repomap prefix
         _tmp_prefix = self.coder.repo_map.repo_content_prefix
         self.coder.repo_map.repo_content_prefix = None
@@ -355,76 +349,16 @@ If you wish to edit a file, add the file to the chat.
         self.commit()
         self.agent_manager.completed_subtasks.append(subtask)
 
-
-# Global agent instance
-agent: ExternalRepoAgent = None
-
-# TODO: move the routes into ExternalRepoAgent
-
-
-@app.post("/run")
-def run(msg: str) -> dict:
-    """API endpoint to send a message to the agent.
-
-    :param msg: The message to send.
-    :return: The result of the message.
-    """
-    result = agent.run(msg)
-    return {"result": result}
-
-
-@app.post("/run_stream")
-async def run_stream(msg: str) -> StreamingResponse:
-    """API endpoint to send a message to the agent and get a streaming response.
-
-    :param msg: The message to send.
-    :return: A StreamingResponse with the result of the message.
-    """
-    return StreamingResponse(agent.run_stream(msg))
-
-
-@app.post("/ask")
-async def ask(msg: str) -> StreamingResponse:
-    """API endpoint to ask a question to the agent.
-
-    :param msg: The question to ask.
-    :return: A StreamingResponse with the result of the question.
-    """
-    return StreamingResponse(agent.ask(msg))
-
-
-@app.get("/get_repo_map")
-def get_repo_map() -> str:
-    """
-    API endpoint to get the repository map.
-
-    :return: The repository map as a string.
-    """
-    result = agent.get_repo_map()
-    return result
-
-
-@app.get("/ping")
-def ping() -> str:
-    """
-    API endpoint to ping the agent.
-
-    :return: "pong" if the agent is alive.
-    """
-    result = "pong"
-    return result
-
-
 def main() -> None:
     """
-    Main function to run the agent application.
+    Main function to run the agent application with WebSocket support.
     """
     parser = argparse.ArgumentParser(
-        description="Start an aider instance.")
+        description="Start an aider instance with WebSocket support.")
     parser.add_argument(
         '--port',
         type=int,
-        help='Port for http requests',
+        help='Port for WebSocket connections',
         default=8080)
     parser.add_argument(
         '--model-name',
@@ -438,13 +372,15 @@ def main() -> None:
         default=8092)
     args = parser.parse_args()
 
-    global agent
-    agent = ExternalRepoAgent(
-        model_name=args.model_name,
-        map_tokens=args.map_tokens)
+    # Set up the RepoAgentConnectionManager
+    conn_manager = RepoAgentConnectionManager()
 
+    # Set up FastAPI with WebSocket support
+    app = FastAPI()
+    app.add_api_websocket_route("/ws/{session_id}", conn_manager.websocket_endpoint)
+
+    # Run the server
     uvicorn.run(app, host="0.0.0.0", port=args.port)
-
 
 if __name__ == "__main__":
     main()

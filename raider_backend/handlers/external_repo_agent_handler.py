@@ -1,25 +1,16 @@
 import asyncio
+import json
 from pathlib import Path
 from typing import AsyncGenerator
-
-import httpx
+import websockets
 
 from raider_backend import utils
 from raider_backend import parse
 from raider_backend.prompts import ExternalRepoAgentHandlerPrompts
-from .base_handler import BaseHandler
+from raider_backend.handlers.base_handler import BaseHandler
 
 
 class InitExternalRepoAgentError(RuntimeError):
-    """
-    Exception raised when the initialization of an ExternalRepoAgent
-    fails.
-
-    This exception is used to indicate that the ExternalRepoAgent could
-    not be initialized after the specified number of retries. It
-    typically occurs when the agent fails to start or respond to ping
-    requests within the allowed time frame.
-    """
     pass
 
 
@@ -56,71 +47,48 @@ class ExternalRepoAgentHandler(BaseHandler):
         else:
             raise InitExternalRepoAgentError(f"Failed to initialize ExternalRepoAgent for {agent_id} on {repo_dir}.")
 
-    def run(self, agent_id: str, msg: str) -> str:
+    async def handle_message(self, agent_id: str, session_id: str, method: str, params: dict):
         if agent_id not in self.agents:
-            raise ValueError(f"Agent {agent_id} not initialized")
+            self.logger.info("Agent %s not yet initialized", agent_id)
+            self.initialize_agent(agent_id, self.agents[agent_id]['repo_dir'], self.agents[agent_id]['model_name'])
 
         port = self.agents[agent_id]['port']
-        self.logger.info(f"Sending message to agent {agent_id}: {msg}")
-        response = httpx.post(
-            f"http://0.0.0.0:{port}/run",
-            params={"msg": msg},
-        )
-        result = response.json()["result"]
-        self.logger.debug(f"Received response from agent {agent_id}: {result}")
-        return result
+        async with websockets.connect(f"ws://localhost:{port}/ws/{session_id}", ping_interval=None) as websocket:
+            request = {
+                "method": method,
+                "params": params or {}
+            }
+            await websocket.send(json.dumps(request))
+            response_data = ""
+            while True:
+                response = await websocket.recv()
+                partial_response_data = json.loads(response)
+                if "ping" in partial_response_data:
+                    continue  # Ignore keepalive pings
+                if partial_response_data == {"<END_OF_MESSAGE>": "<END_OF_MESSAGE>"}:
+                    return response_data
+                response_data += partial_response_data["result"]
+                self.logger.info(partial_response_data["result"])
 
-    async def run_stream(self, agent_id: str, msg: str, chunk_size: int = 64) -> AsyncGenerator[str, None]:
-        port = self._get_agent_port(agent_id)
-        self.logger.info(f"Sending message for streaming to agent {agent_id}: {msg}")
-        async with httpx.AsyncClient() as client:
-            async with client.stream(
-                "POST",
-                f"http://0.0.0.0:{port}/run_stream",
-                params={"msg": msg}
-            ) as response:
-                async for chunk in response.aiter_text(chunk_size=chunk_size):
-                    self.logger.debug(f"Received partial response from agent {agent_id}: {chunk}")
-                    yield chunk
+    async def run(self, agent_id: str, msg: str) -> str:
+        return await self.handle_message(agent_id, "session", "run", {"msg": msg})
 
-    async def ask(self, agent_id: str, msg: str, chunk_size: int = 64) -> AsyncGenerator[str, None]:
-        port = self._get_agent_port(agent_id)
-        self.logger.info(f"Asking question to agent {agent_id}: {msg}")
-        async with httpx.AsyncClient() as client:
-            async with client.stream(
-                "POST",
-                f"http://0.0.0.0:{port}/ask",
-                params={"msg": msg}
-            ) as response:
-                async for chunk in response.aiter_text(chunk_size=chunk_size):
-                    self.logger.debug(f"Received partial response from agent {agent_id}: {chunk}")
-                    yield chunk
+    async def run_stream(self, agent_id: str, msg: str) -> AsyncGenerator[str, None]:
+        response = await self.handle_message(agent_id, "session", "run_stream", {"msg": msg})
+        for chunk in response.split():  # This is a simplification; you might need to adjust based on actual response format
+            yield chunk
 
-    # TODO
-    def run_cmd(self, agent_id: str, cmd: str) -> str:
-        port = self._get_agent_port(agent_id)
-        self.logger.info(f"Running command for agent {agent_id}: {cmd}")
-        response = httpx.post(
-            f"http://0.0.0.0:{port}/msg",
-            params={"msg": f"/run {cmd}"},
-        )
-        result = response.json()["result"]
-        self.logger.info(f"Received command response from agent {agent_id}: {result}")
-        return result
+    async def ask(self, agent_id: str, msg: str) -> AsyncGenerator[str, None]:
+        response = await self.handle_message(agent_id, "session", "ask", {"msg": msg})
+        for chunk in response.split():  # This is a simplification; you might need to adjust based on actual response format
+            yield chunk
 
-    def get_repo_map(self, agent_id: str) -> str:
-        port = self._get_agent_port(agent_id)
-        self.logger.info(f"Getting repository map for agent {agent_id}")
-        response = httpx.get(
-            f"http://0.0.0.0:{port}/get_repo_map"
-        )
-        repo_map = response.json()
-        self.logger.debug(f"Received repository map for agent {agent_id}: {repo_map}")
-        return repo_map
+    async def get_repo_map(self, agent_id: str) -> str:
+        return await self.handle_message(agent_id, "session", "get_repo_map", {})
 
     async def find_relevant_code(self, agent_id: str, task: str):
-        repo_dir = self._get_agent_repo_dir(agent_id)
-        model_name = self._get_agent_model_name(agent_id)
+        repo_dir = self.agents[agent_id]['repo_dir']
+        model_name = self.agents[agent_id]['model_name']
         code_snippet_filename = utils.get_absolute_path(
             f"code_snippets_{repo_dir.replace('/', '').replace('.','')}.txt")
 
@@ -130,7 +98,7 @@ class ExternalRepoAgentHandler(BaseHandler):
         Path(code_snippet_filename).unlink(missing_ok=True)
 
         # Step 1: Get list of relevant files
-        repo_map = self.get_repo_map(agent_id)
+        repo_map = await self.get_repo_map(agent_id)
 
         system_prompt = ExternalRepoAgentHandlerPrompts.SYSTEM_PROMPT_FIND_RELEVANT_FILENAMES.format(
             repo_map=repo_map)
