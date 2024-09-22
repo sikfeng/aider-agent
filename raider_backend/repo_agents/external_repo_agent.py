@@ -1,10 +1,13 @@
 import argparse
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI
 import uvicorn
 
-from raider_backend.connection_managers.repo_agent_connection_manager import RepoAgentConnectionManager
 from raider_backend.repo_agents.base_repo_agent import BaseRepoAgent
+
+if TYPE_CHECKING:
+    from raider_backend.connection_managers.repo_agent_connection_manager import RepoAgentConnectionManager
 
 class ExternalRepoAgent(BaseRepoAgent):
     """A class to manage the ExternalRepoAgent."""
@@ -51,11 +54,13 @@ def main() -> None:
     args = parser.parse_args()
 
     # Set up the RepoAgentConnectionManager
+    from raider_backend.connection_managers.repo_agent_connection_manager import RepoAgentConnectionManager
     conn_manager = RepoAgentConnectionManager()
 
     # Set up FastAPI with WebSocket support
     app = FastAPI()
     app.add_api_websocket_route("/ws/{session_id}", conn_manager.websocket_endpoint)
+    app.add_api_route("/ping", conn_manager.ping)
 
     # Run the server
     uvicorn.run(app, host="0.0.0.0", port=args.port)

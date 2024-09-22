@@ -67,7 +67,3 @@ class AgentManagerConnectionManager(BaseConnectionManager):
             await self.send_message(websocket, {"error": f"Unknown method: {method}"}, session_id)
 
         await self.send_message(websocket, self.END_OF_MESSAGE_RESPONSE, session_id)
-
-    def ping(self) -> str:
-        result = "pong"
-        return result

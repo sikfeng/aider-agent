@@ -132,3 +132,7 @@ class BaseConnectionManager(ABC):
         finally:
             keepalive_task.cancel()
             self.logger.info("Keepalive task cancelled")
+
+    def ping(self) -> str:
+        result = "pong"
+        return result

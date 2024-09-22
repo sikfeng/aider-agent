@@ -78,7 +78,7 @@ class BaseRepoAgent:
         for partial_response in self.coder.run_stream(msg):
             yield partial_response
 
-    def ask(self, msg: str) -> AsyncGenerator[str, None]:
+    async def ask(self, msg: str) -> AsyncGenerator[str, None]:
         """Ask a question to the agent.
 
         :param msg: The question to ask.
@@ -90,7 +90,8 @@ class BaseRepoAgent:
             edit_format="ask",
             summarize_from_coder=False,
         )
-        return self.coder.run_stream(msg)
+        for partial_response in self.coder.run_stream(msg):
+            yield partial_response
 
     def reset(self) -> None:
         """Reset the agent to its initial state.

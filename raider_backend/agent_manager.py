@@ -22,7 +22,7 @@ import uvicorn
 from . import utils
 from .handlers.external_repo_agent_handler import ExternalRepoAgentHandler, InitExternalRepoAgentError
 from .planner_agent import PlannerAgent
-import raider_backend.repo_agent
+from raider_backend.repo_agents.main_repo_agent import MainRepoAgent
 
 litellm.drop_params = True
 litellm.suppress_debug_info = True
@@ -41,7 +41,7 @@ class AgentManager:
         Initialize the AgentManager.
         """
         self.planner_agent: Optional[PlannerAgent] = None
-        self.main_repo_agent: Optional[raider_backend.MainRepoAgent] = None
+        self.main_repo_agent: Optional[MainRepoAgent] = None
         self.external_repo_agent_handler: ExternalRepoAgentHandler = ExternalRepoAgentHandler()
         self.logger = logging.getLogger("AgentManager")
         self.model_name = model_name
@@ -135,7 +135,7 @@ class AgentManager:
         :return: True if the agent is initialized, otherwise False.
         """
         try:
-            self.main_repo_agent = raider_backend.repo_agent.MainRepoAgent(
+            self.main_repo_agent = MainRepoAgent(
                 model_name=model_name, agent_manager=self)
             self.logger.info("MainRepoAgent successfully initialized.")
             return True

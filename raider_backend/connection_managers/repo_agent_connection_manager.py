@@ -1,10 +1,11 @@
-import json
-from typing import Any, Dict
+from typing import Any, Dict, TYPE_CHECKING
 
 from fastapi import WebSocket
 
 from raider_backend.connection_managers.base_connection_manager import BaseConnectionManager
-from raider_backend.repo_agent import ExternalRepoAgent
+
+if TYPE_CHECKING:
+    from raider_backend.repo_agents.external_repo_agent import ExternalRepoAgent
 
 class RepoAgentConnectionManager(BaseConnectionManager):
     def __init__(self) -> None:
@@ -14,6 +15,7 @@ class RepoAgentConnectionManager(BaseConnectionManager):
     async def _on_connect(self, websocket: WebSocket, session_id: str) -> None:
         await super()._on_connect(websocket, session_id)
         if self.repo_agents.get(session_id) is None:
+            from raider_backend.repo_agents.external_repo_agent import ExternalRepoAgent
             self.repo_agents[session_id] = ExternalRepoAgent()
             self.logger.info(
                 "Initialized ExternalRepoAgent with session ID %s", session_id)

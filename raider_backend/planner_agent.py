@@ -84,7 +84,7 @@ class PlannerAgent:
             response = ""
             for _ in range(self.max_reflections):
                 curr_response = ""
-                for response_chunk in self.agent_manager.main_repo_agent.ask(query_message):
+                async for response_chunk in self.agent_manager.main_repo_agent.ask(query_message):
                     curr_response += response_chunk
                 response += curr_response + "\n"
                 if self.agent_manager.main_repo_agent.coder.reflected_message is None:
