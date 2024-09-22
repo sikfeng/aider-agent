@@ -17,17 +17,23 @@ The Raider Backend system is designed to manage multiple agents that can perform
 ## Directory Structure
 
 - `raider_backend/`: Main directory containing the core functionalities.
-  - `__init__.py`: Initializes the `raider_backend` package and configures the `litellm` library.
+  - `__init__.py`: Initializes the `raider_backend` package.
   - `agent_manager.py`: Manages the overall process and agents.
-  - `connection_manager.py`: Manages WebSocket connections and message buffering.
-  - `external_repo_agent_handler.py`: Manages interactions with ExternalRepoAgent.
-  - `launch.py`: Launches the ConnectionManager with a WebSocket endpoint.
+  - `launch.py`: Launches the LaunchConnectionManager with a WebSocket endpoint.
   - `logger.py`: Configures logging for the application.
   - `parse.py`: Provides functionality to parse source code files and extract class, method, and function definitions using the tree-sitter library.
   - `planner_agent.py`: Manages the planning process for a given objective.
   - `prompts.py`: Contains prompt templates used by the agents for various tasks.
-  - `repo_agent.py`: Manages MainRepoAgent and ExternalRepoAgent.
+  - `repo_agent.py`: Defines BaseRepoAgent, ExternalRepoAgent, and MainRepoAgent classes.
   - `utils.py`: Utility functions for various tasks.
+  - `connection_managers/`: Directory for connection management classes.
+    - `base_connection_manager.py`: Defines the BaseConnectionManager class.
+    - `agent_manager_connection_manager.py`: Implements the AgentManagerConnectionManager.
+    - `launch_connection_manager.py`: Implements the LaunchConnectionManager.
+  - `handlers/`: Directory for handler classes.
+    - `base_handler.py`: Defines the BaseHandler class.
+    - `agent_manager_handler.py`: Implements the AgentManagerHandler.
+    - `external_repo_agent_handler.py`: Implements the ExternalRepoAgentHandler.
 
 ## Installation
 
@@ -37,15 +43,18 @@ The Raider Backend system is designed to manage multiple agents that can perform
     cd raider-backend
     ```
 
-2. Install the required dependencies:
+2. Install the raider_backend package and its dependencies:
     ```sh
-    pip install -r requirements.txt
+    pip install -e .
     ```
+   This command installs the package in editable mode (-e), which is useful for development as it allows you to modify the source code and immediately see the effects without reinstalling.
 
 3. (Optional) Build the Docker image:
     ```sh
     ./build_docker.sh
     ```
+
+After installation, you can import and use the raider_backend package in your Python scripts or interactive sessions.
 
 ## Usage
 
@@ -56,15 +65,14 @@ launch_endpoint
 
 The usage information is as follows:
 ```
-usage: launch_endpoint [-h] [--port PORT] [--logfile LOGFILE] [--repo-dir REPO_DIR]
+usage: launch_endpoint [-h] [--port PORT] [--logfile LOGFILE]
 
 Launch the AgentManager with a Websocket endpoint.
 
 options:
-  -h, --help           show this help message and exit
-  --port PORT          Port of the websocket (default: 10000)
-  --logfile LOGFILE    Path to logfile (default: /tmp/manager.log)
-  --repo-dir REPO_DIR  Directory of the main repository (default: .)
+  -h, --help         show this help message and exit
+  --port PORT        Port of the websocket (default: 10000)
+  --logfile LOGFILE  Path to logfile (default: /tmp/manager.log)
 ```
 
 ### Running in a Devcontainer
@@ -87,66 +95,68 @@ This will set up the development environment inside a Docker container, ensuring
 
 ## API Endpoints
 
-The system provides several WebSocket methods for interacting with the agents:
+The system provides a WebSocket endpoint for interacting with the agents:
 
-- **Repo Agent Methods**:
-  - `POST /msg`: Sends a message to the agent.
-    - **Params**: 
-      - `msg` (str): The message to send.
-  - `POST /run_stream`: Runs a stream with the given message.
-    - **Params**: 
-      - `msg` (str): The message to run in the stream.
-  - `POST /ask`: Asks a question to the agent.
-    - **Params**: 
-      - `msg` (str): The question to ask.
-  - `GET /get_repo_map`: Retrieves the repository map.
-  - `GET /ping`: Pings the agent to check if it's alive.
+- **WebSocket Endpoint**: `ws://<host>:<port>/ws/{session_id}`
 
-- **Manager Methods** :(WebSocket endpoint: `ws://<host>:<port>/ws/{session_id}`)
+  This endpoint is managed by the `LaunchConnectionManager`, which acts as an intermediary between the external client and the `AgentManagerHandler`.
+
+  When sending messages to this endpoint, use the following JSON format:
+
+  ```json
+  {
+    "main_repo_dir": "<path_to_main_repo>",
+    "method": "<method_name>",
+    "params": {
+      "<param1>": "<value1>",
+      "<param2>": "<value2>",
+      ...
+    }
+  }
+  ```
+
+  The `main_repo_dir` parameter is required for all methods and specifies the directory of the main repository being worked on.
+
+  Available methods include:
+
   - `init_external_repo_agent`: Initializes an external repository agent.
     - **Params**: 
       - `repo_dir` (str): The directory of the repository.
+      - `model_name` (str, optional): The name of the model to use. Default is "azure/gpt-4o".
+      - `timeout` (int, optional): Timeout for agent initialization. Default is 10 seconds.
+
   - `get_external_repo_agents`: Retrieves a list of external repository agents.
+
   - `generate_subtasks`: Generates subtasks for a given objective.
     - **Params**: 
       - `objective` (str): The main objective.
-  - `finetune_subtasks`: Finetunes subtasks based on the given instruction.
-    - **Params**: 
-      - `objective` (str): The main objective.
-      - `instruction` (str): Additional instructions for finetuning.
+
   - `run_subtask`: Runs a specified subtask.
     - **Params**: 
       - `subtask` (str): The subtask to run.
+
   - `run_multiple_subtasks`: Runs a list of subtasks.
     - **Params**: 
       - `subtasks` (List[str]): The list of subtasks to run.
+
   - `undo`: Undoes the last commit.
+
   - `shutdown`: Shuts down the AgentManager.
 
-### WebSocket Data Format
-
-For each WebSocket method, the data should be sent in the following JSON format:
-
-```json
-{
-  "method": "<method_name>",
-  "params": {
-    "<param1>": "<value1>",
-    "<param2>": "<value2>",
-    ...
-  }
-}
-```
-
-#### Example
+### Example
 
 To initialize an external repository agent, the data format would be:
 
 ```json
 {
+  "main_repo_dir": "/path/to/main/repo",
   "method": "init_external_repo_agent",
   "params": {
-    "repo_dir": "/path/to/repo"
+    "repo_dir": "/path/to/external/repo",
+    "model_name": "azure/gpt-4o",
+    "timeout": 15
   }
 }
 ```
+
+The `LaunchConnectionManager` will process this request, forward it to the appropriate `AgentManagerHandler`, and return the response through the WebSocket connection.
