@@ -8,6 +8,7 @@ from raider_backend import utils
 from raider_backend import parse
 from raider_backend.prompts import ExternalRepoAgentHandlerPrompts
 from raider_backend.handlers.base_handler import BaseHandler
+from raider_backend.connection_managers.base_connection_manager import BaseConnectionManager
 
 
 class InitExternalRepoAgentError(RuntimeError):
@@ -63,12 +64,17 @@ class ExternalRepoAgentHandler(BaseHandler):
             while True:
                 response = await websocket.recv()
                 partial_response_data = json.loads(response)
-                if "ping" in partial_response_data:
+                if partial_response_data == BaseConnectionManager.KEEP_ALIVE_PING:
                     continue  # Ignore keepalive pings
-                if partial_response_data == {"<END_OF_MESSAGE>": "<END_OF_MESSAGE>"}:
+                elif partial_response_data == BaseConnectionManager.END_OF_MESSAGE_RESPONSE:
                     return response_data
-                response_data += partial_response_data["result"]
-                self.logger.info(partial_response_data["result"])
+
+                if "error" in partial_response_data:
+                    response_data += partial_response_data["error"]
+                    self.logger.error(partial_response_data["error"])
+                elif "result" in partial_response_data:
+                    response_data += partial_response_data["result"]
+                    self.logger.info(partial_response_data["result"])
 
     async def run(self, agent_id: str, msg: str) -> str:
         return await self.handle_message(agent_id, "session", "run", {"msg": msg})

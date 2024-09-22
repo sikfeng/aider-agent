@@ -10,7 +10,8 @@ class BaseConnectionManager(ABC):
     """
     Manages WebSocket connections and message buffering.
     """
-    END_OF_MESSAGE_RESPONSE = {"<END_OF_MESSAGE>": "<END_OF_MESSAGE>"}
+    END_OF_MESSAGE_RESPONSE = {"<END_OF_MESSAGE>": ""}
+    KEEP_ALIVE_PING = {"<PING>", ""}
 
     def __init__(self) -> None:
         """
@@ -94,7 +95,7 @@ class BaseConnectionManager(ABC):
         """
         while True:
             await asyncio.sleep(10)  # Adjust the interval as needed
-            await self.send_message(websocket, {"ping": "keepalive"}, session_id)
+            await self.send_message(websocket, BaseConnectionManager.KEEP_ALIVE_PING, session_id)
             self.logger.debug("Sent keepalive ping")
 
     async def websocket_endpoint(

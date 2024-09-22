@@ -7,10 +7,11 @@ import websockets
 
 from raider_backend.logger import LOG_CONFIG
 from raider_backend import utils
+from raider_backend.connection_managers.base_connection_manager import BaseConnectionManager
 
 # Initialize logging
 LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(
-    "/tmp/test_agent_manager.log")
+    "/tmp/test_external_repo_agent.log")
 dictConfig(LOG_CONFIG)
 logger = logging.getLogger("TestExternalRepoAgent")
 
@@ -28,16 +29,16 @@ async def test_websocket_endpoint(uri, method, params=None):
         while True:
             response = await websocket.recv()
             partial_response_data = json.loads(response)
-            if "ping" in partial_response_data:
+            if partial_response_data == BaseConnectionManager.KEEP_ALIVE_PING:
                 continue  # Ignore keepalive pings
-            elif partial_response_data == {
-                    "<END_OF_MESSAGE>": "<END_OF_MESSAGE>"}:
+            elif partial_response_data == BaseConnectionManager.END_OF_MESSAGE_RESPONSE:
                 return response_data
-            elif "error" in partial_response_data:
-                response_data += str(partial_response_data["error"])
+
+            if "error" in partial_response_data:
+                response_data += partial_response_data["error"]
                 logger.error(partial_response_data["error"])
-            else:
-                response_data += str(partial_response_data["result"])
+            elif "result" in partial_response_data:
+                response_data += partial_response_data["result"]
                 logger.info(partial_response_data["result"])
 
 
