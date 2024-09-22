@@ -20,7 +20,7 @@ from fastapi import FastAPI
 import uvicorn
 
 from . import utils
-from .connection_manager import LaunchConnectionManager
+from raider_backend.connection_managers.launch_connection_manager import LaunchConnectionManager
 from .logger import LOG_CONFIG
 
 conn_manager = LaunchConnectionManager()

@@ -230,7 +230,7 @@ class AgentManager:
         return "shutdown"
 
 def main():
-    from .connection_manager import AgentManagerConnectionManager
+    from raider_backend.connection_managers.agent_manager_connection_manager import AgentManagerConnectionManager
     conn_manager = AgentManagerConnectionManager()
 
     app = FastAPI()
