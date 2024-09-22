@@ -42,8 +42,7 @@ class AgentManager:
         """
         self.planner_agent: Optional[PlannerAgent] = None
         self.main_repo_agent: Optional[raider_backend.MainRepoAgent] = None
-        self.external_repo_agent_handlers: Dict[str,
-                                                ExternalRepoAgentHandler] = {}
+        self.external_repo_agent_handler: ExternalRepoAgentHandler = ExternalRepoAgentHandler()
         self.logger = logging.getLogger("AgentManager")
         self.model_name = model_name
         self.max_reflections = max_reflections
@@ -87,37 +86,38 @@ class AgentManager:
             model_name: str = "azure/gpt-4o",
             timeout: int = 10) -> bool:
         """
-        Initialize an Aider agent.
+        Initialize an external repo agent.
 
         :param repo_dir: The directory of the repository.
         :param model_name: The name of the model to use.
+        :param timeout: Timeout for agent initialization.
         :return: True if the agent is initialized, otherwise False.
         """
         repo_dir = utils.get_absolute_path(repo_dir)
         if not Path(repo_dir).is_dir():
             self.logger.warning(
-                ("Attempt to initialize ExternalRepoAgent on non-existent "
-                 "directory %s, skipping."),
-                repo_dir)
+                "Attempt to initialize ExternalRepoAgent on non-existent "
+                "directory %s, skipping.", repo_dir)
             return False
         if repo_dir == utils.get_absolute_path("."):
             self.logger.warning(
-                ("Attempt to initialize ExternalRepoAgent on main repo, "
-                 "skipping."))
+                "Attempt to initialize ExternalRepoAgent on main repo, "
+                "skipping.")
             return False
-        if repo_dir in self.external_repo_agent_handlers:
+        
+        agent_id = f"external_repo_{repo_dir}"
+        if agent_id in self.external_repo_agent_handler.agents:
             self.logger.warning(
-                ("Attempt to initialize a new ExternalRepoAgent on already "
-                 "initialized repo, skipping."))
+                "Attempt to initialize a new ExternalRepoAgent on already "
+                "initialized repo, skipping.")
             return False
 
         try:
-            agent = ExternalRepoAgentHandler(
-                model_name=model_name,
+            self.external_repo_agent_handler.initialize_agent(
+                agent_id=agent_id,
                 repo_dir=repo_dir,
-                agent_manager=self,
-                timeout=timeout)
-            self.external_repo_agent_handlers[repo_dir] = agent
+                model_name=model_name
+            )
             self.logger.info(
                 "Successfully initialized an ExternalRepoAgent on %s.",
                 repo_dir)
@@ -212,13 +212,13 @@ class AgentManager:
 
     def get_external_repo_agents(self) -> List[str]:
         """
-        Get a list of all initialized Aider agents.
+        Get a list of all initialized external repo agents.
 
-        :return: A list of initialized Aider agents.
+        :return: A list of initialized external repo agents.
         """
         self.logger.debug(
-            "ExternalRepoAgents: %s", self.external_repo_agent_handlers.keys())
-        return list(self.external_repo_agent_handlers.keys())
+            "ExternalRepoAgents: %s", self.external_repo_agent_handler.agents.keys())
+        return list(self.external_repo_agent_handler.agents.keys())
 
     def shutdown(self) -> str:
         """
@@ -226,44 +226,8 @@ class AgentManager:
 
         :return: "shutdown" after shutting down all agents.
         """
-        for repo_dir, external_repo_agent in self.external_repo_agent_handlers.items():
-            self.logger.info("Killing ExternalRepoAgent on %s.", repo_dir)
-            external_repo_agent.kill()
+        self.external_repo_agent_handler.kill_all_agents()
         return "shutdown"
-
-    async def call_agent_function(self, agent_name: str, function_name: str, params: Dict[str, Any]) -> Any:
-        """
-        Dynamically call a function of a specified agent.
-
-        :param agent_name: The name of the agent to call ('planner', 'main_repo', or 'external_repo_<repo_dir>')
-        :param function_name: The name of the function to call
-        :param params: A dictionary of parameters to pass to the function
-        :return: The result of the function call
-        """
-        if agent_name == 'planner':
-            agent = self.planner_agent
-        elif agent_name == 'main_repo':
-            agent = self.main_repo_agent
-        elif agent_name.startswith('external_repo_'):
-            repo_dir = agent_name[len('external_repo_'):]
-            agent = self.external_repo_agent_handlers.get(repo_dir)
-        else:
-            raise ValueError(f"Unknown agent: {agent_name}")
-
-        if agent is None:
-            raise ValueError(f"Agent {agent_name} is not initialized")
-
-        if not hasattr(agent, function_name):
-            raise AttributeError(
-                f"Function {function_name} not found in agent {agent_name}")
-
-        func = getattr(agent, function_name)
-        if not callable(func):
-            raise AttributeError(
-                f"{function_name} is not a callable function in agent {agent_name}")
-
-        return await func(**params)
-
 
 def main():
     from .connection_manager import AgentManagerConnectionManager

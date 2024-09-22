@@ -247,11 +247,11 @@ class MainRepoAgent(BaseRepoAgent):
         """
         self.logger.info("Starting to run %s.", subtask)
         self.logger.info("Querying ExternalRepoAgentHandlers.")
-        await asyncio.gather(*(external_repo_agent.find_relevant_code(subtask)
-                               for external_repo_agent
-                               in self.agent_manager.external_repo_agent_handlers.values()))
+        await asyncio.gather(*(self.agent_manager.external_repo_agent_handler.find_relevant_code(agent_id=repo_dir, task=subtask)
+                               for repo_dir
+                               in self.agent_manager.external_repo_agent_handler.agents.keys()))
 
-        for repo_path in self.agent_manager.external_repo_agent_handlers:
+        for repo_path in self.agent_manager.external_repo_agent_handler.agents.keys():
             code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.', '')}.txt"
             if not Path(code_snippet_filename).is_file():
                 self.logger.warning(

@@ -48,10 +48,10 @@ async def test():
     task = "Make a basic hello world vscode extension"
 
     for repo_dir in external_repos:
-        logger.info("Initializing external repo agent for %s", repo_dir)
+        logger.info("Initializing external repo agent %s on main repo %s", repo_dir, main_repo_dir)
         await test_websocket_endpoint(uri, main_repo_dir, "init_external_repo_agent", {"repo_dir": repo_dir})
 
-    logger.info("Getting external repo agents")
+    logger.info("Getting external repo agents of %s", main_repo_dir)
     await test_websocket_endpoint(uri, main_repo_dir, "get_external_repo_agents")
 
     for repo_dir in external_repos2:
@@ -67,8 +67,6 @@ async def test():
     logger.info("Generating subtasks for task: %s", task)
     subtasks_response = await test_websocket_endpoint(uri, main_repo_dir, "generate_subtasks", {"objective": task})
     subtasks = json.loads(subtasks_response)
-    subtasks = ["set up a basic vscode extension scaffold using `yo code` to generate necessary files."]
-
 
     for subtask in subtasks:
         logger.info("Running subtask: %s", subtask)
