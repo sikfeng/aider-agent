@@ -8,6 +8,7 @@ initialize agents, and manage the state of the system.
 """
 import asyncio
 import logging
+from logging.config import dictConfig
 import os
 from pathlib import Path
 import platform
@@ -15,7 +16,6 @@ from typing import AsyncGenerator, List, Dict, Optional, Any
 import argparse
 
 from distro import name as distro_name
-import litellm
 from fastapi import FastAPI
 import uvicorn
 
@@ -23,10 +23,7 @@ from . import utils
 from .handlers.external_repo_agent_handler import ExternalRepoAgentHandler, InitExternalRepoAgentError
 from .planner_agent import PlannerAgent
 from raider_backend.repo_agents.main_repo_agent import MainRepoAgent
-
-litellm.drop_params = True
-litellm.suppress_debug_info = True
-litellm.set_verbose = False
+from raider_backend.logger import LOG_CONFIG
 
 
 class AgentManager:
@@ -248,6 +245,8 @@ def main():
     parser.add_argument("--model-name", type=str, default="azure/gpt-4o",
                         help="Model name for the AgentManager")
     args = parser.parse_args()
+
+    dictConfig(LOG_CONFIG)
 
     args.main_repo_dir = utils.get_absolute_path(args.main_repo_dir)
     os.chdir(args.main_repo_dir)

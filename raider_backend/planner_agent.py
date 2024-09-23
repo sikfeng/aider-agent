@@ -1,14 +1,17 @@
 """
 This module defines the PlannerAgent class, which is responsible for
 managing the planning process for a given objective. The PlannerAgent
-utilizes a language model to gather information, generate questions,
-and create a plan consisting of subtasks to achieve the specified
-objective.
+utilizes a language model to generate a plan consisting of subtasks
+to achieve the specified objective.
+
+The PlannerAgent can query the codebase, incorporate additional information,
+and generate a structured plan with task types and descriptions.
 """
-import asyncio
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import AsyncGenerator, List, Dict, TYPE_CHECKING
+
+from taskgen import AsyncAgent
 
 from raider_backend import utils
 from raider_backend.prompts import PlannerAgentPrompts
@@ -19,40 +22,39 @@ if TYPE_CHECKING:
 
 class PlannerAgent:
     """
-    A class to manage the Planner agent.
+    A class to manage the Planner agent, responsible for generating subtasks
+    to achieve a given objective using language models.
     """
 
     def __init__(
             self,
             model_name: str = "azure/gpt-4o",
-            map_tokens=8092,
-            max_questions=5,
-            max_subtasks=5,
-            max_concurrent_llm_queries=1,
+            map_tokens: int = 8092,
+            max_iterations: int = 10,
             max_reflections: int = 5,
             agent_manager: 'AgentManager' = None) -> None:
         """
         Initialize the PlannerAgent.
 
         :param model_name: The name of the model to use.
+        :param map_tokens: The number of tokens for mapping.
+        :param max_iterations: The maximum number of iterations to run the TaskGen agent.
+        :param max_reflections: The maximum number of reflections for MainRepoAgent.
         :param agent_manager: The AgentManager instance.
         """
-        self.model_name = model_name
+        self.model_name: str = model_name
         self.logger = logging.getLogger("PlannerAgent")
-        self.map_tokens = map_tokens
+        self.map_tokens: int = map_tokens
         self.agent_manager: 'AgentManager' = agent_manager
+        self.max_iterations: int = max_iterations
+        self.max_reflections: int = max_reflections
 
-        self.max_questions = max_questions
-        self.max_subtasks = max_subtasks
-        self.max_concurrent_llm_queries = max_concurrent_llm_queries
-        self.max_reflections = max_reflections
-
-    async def generate_subtasks(self, objective: str):
+    async def generate_subtasks(self, objective: str) -> AsyncGenerator[List[Dict[str, str]], None]:
         """
         Generate a list of subtasks to achieve the given objective.
 
         :param objective: The main objective.
-        :return: A list of subtasks.
+        :return: An asynchronous generator yielding lists of parsed tasks.
         """
         tmp_model_name = self.model_name
         # Empirically, only these two models have been successful in generating a plan following the format specified.
@@ -60,12 +62,19 @@ class PlannerAgent:
             tmp_model_name = "azure/gpt-4o"
 
         async def query_codebase(query_message: str) -> str:
-            """Ask a Codebase AI assistant questions about the existing codebase
-            The assistant can only read the codebase and answer queries. It cannot run commands, execute files, or edit files."""
+            """
+            Ask a Codebase AI assistant questions about the existing codebase.
+            The assistant can only read the codebase and answer queries.
+            It cannot run commands, execute files, or edit files.
+            It has no memory of previous conversations.
+
+            :param query_message: The question to ask the AI assistant.
+            :return: The response from the AI assistant.
+            """
             self.agent_manager.main_repo_agent.reset()
 
             response = ""
-            for _ in range(3):
+            for _ in range(self.max_reflections):
                 curr_response = ""
                 async for response_chunk in self.agent_manager.main_repo_agent.ask(query_message):
                     curr_response += response_chunk
@@ -77,70 +86,50 @@ class PlannerAgent:
             return response
 
         def finetune_codebase_summary_and_plan(shared_variables, additional_info:str):
-            """Incorporates additional info to summary of codebase, and finetunes the plan"""
+            """
+            Incorporates additional info to summary of codebase, and finetunes the plan.
+
+            :param shared_variables: A dictionary containing 'Summary' and 'Plan' keys.
+            :param additional_info: Additional information to incorporate into the summary and plan.
+            """
+            system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_FINETUNE_CODEBASE_SUMMARY
+            user_prompt = PlannerAgentPrompts.USER_PROMPT_FINETUNE_CODEBASE_SUMMARY.format(summary=shared_variables["Summary"], additional_info=additional_info)
             res = utils.llm(self.model_name)(
-                system_prompt="Finetune the codebase summary with additional infoi. The summary should focus on what are the functionality already implemented, and what functionality is not implemented yet",
-                user_prompt=(
-                    f"**Current summary**: {shared_variables['Summary']} \n\n"
-                    f"**Additional info**: {additional_info} \n\n"
-                ),
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
             )
             shared_variables["Summary"] = res
 
-            res = utils.llm(self.model_name)(
-                system_prompt="""Finetune the plan using additional info.
-
-Ensure each task:
-- Is specific, with a clear, detailed description.
-- Represents a single, actionable step.
-- Contributes directly to the overall goal, avoiding unnecessary or redundant work.
-- Does not suggest non-essential tasks like "document findings."
-- Does not include tasks for building, testing, or deployment unless requested.
-
-Output Format:
----------------
-
-[Task 1]
-
-<description of task>
-
-[TASK TYPE: <type of task: Enum['Coding', 'Command execution', 'User action']> ]
-
-[Task 2]
-
-<description of task>
-
-[TASK TYPE: <type of task: Enum['Coding', 'Command execution', 'User action']> ]
-
-...
-
-[Task N]
-
-<description of task>
-
-[TASK TYPE: <type of task: Enum['Coding', 'Command execution', 'User action']> ]
-""",
-                user_prompt=(
-                    f"**Existing plan**: {shared_variables['Plan']} \n\n"
-                    f"**Additional info**: {additional_info} \n\n"
-                    f"**Objective**: {objective}"),
+            system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_FINETUNE_PLAN
+            user_prompt = PlannerAgentPrompts.USER_PROMPT_FINETUNE_PLAN.format(plan=shared_variables["Plan"], additional_info=additional_info, objective=objective)
+            finetuned_plan = utils.llm(self.model_name)(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
             )
-            shared_variables["Plan"] = res
+            shared_variables["Plan"] = finetuned_plan
 
-        from taskgen import AsyncAgent
         agent = AsyncAgent(
-            'Code planner',
-            "Help user to plan tasks to ensure that the code fufils a requirement. You should ensure that the shared_variable Plan will implement the user's objective.",
+            "Code planner",
+            "Help user to plan tasks to ensure that the code fufils a requirement. Ensure that the Plan in the Global Context will implement the user's objective.",
             llm = utils.llm_async(tmp_model_name),
             shared_variables = {"Plan": "", "Summary": ""},
             default_to_llm = False,
-            max_subtasks = 10,
+            max_subtasks = self.max_iterations,
             global_context = "Tentative plan: <Plan>, Tentative summary: <Summary>",
         )
         agent.assign_functions(function_list=[query_codebase, finetune_codebase_summary_and_plan])
 
         agent.reset()
-        await agent.run(f"User objective: {objective}")
+        for _ in range(agent.max_subtasks):
+            if agent.task_completed:
+                break
+            await agent.run(f"User objective: {objective}", num_subtasks=1)
+            if agent.shared_variables["Plan"]:
+                self.logger.info("Tentative plan: %s", agent.shared_variables["Plan"])
+            else:
+                self.logger.info("No tentative plan yet.")
+        else:
+            self.logger.warning("Planner exceeded maximum iterations.")
         
         if agent.shared_variables["Plan"] == "":
             self.logger.warning("Plan is empty")
@@ -177,11 +166,17 @@ Output Format:
         self.logger.info("Parsed tasks: %s", parsed_tasks)
         yield parsed_tasks
 
+    # TODO: refactor agent to be a class field rather than a method variable
+    # TODO: add a method to force a plan to be generated based on current conversation history
+    # TODO: add a agent reset method
+    # TODO: update agent manager with these new methods
 
     def finetune_subtasks(self, objective: str, instruction: str) -> list[str]:
         """
         Finetune the generated subtasks based on additional
         instructions.
+
+        Note: This method is currently not implemented.
 
         :param objective: The main objective.
         :param instruction: Additional instructions for finetuning.
