@@ -5,12 +5,14 @@ utilizes a language model to gather information, generate questions,
 and create a plan consisting of subtasks to achieve the specified
 objective.
 """
-import logging
 import asyncio
-
-from . import utils
-from .prompts import PlannerAgentPrompts
+import logging
+import re
 from typing import TYPE_CHECKING
+
+from raider_backend import utils
+from raider_backend.prompts import PlannerAgentPrompts
+
 if TYPE_CHECKING:
     from raider_backend.agent_manager import AgentManager
 
@@ -45,91 +47,6 @@ class PlannerAgent:
         self.max_concurrent_llm_queries = max_concurrent_llm_queries
         self.max_reflections = max_reflections
 
-    async def gather_information(self, objective: str) -> dict:
-        """
-        Gather necessary information to generate a plan for the given
-        objective.
-
-        :param objective: The main objective.
-        :return: A dictionary containing the gathered information.
-        """
-        repo_map = self.agent_manager.main_repo_agent.get_repo_map()
-
-        self.logger.info("Repo Map: %s", repo_map)
-        # if the git repo has no files, repo_map is None
-        # not sure if there is a case where repo_map may be just
-        # whitespace but I handle it as the same
-        if repo_map is None or repo_map.strip() == "":
-            return None
-
-        # Ask the LLM what questions to ask using strictjson
-        system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_GET_QUESTIONS.format(
-            repo_map=repo_map, max_questions=self.max_questions)
-        user_prompt = PlannerAgentPrompts.USER_PROMPT_GET_QUESTIONS.format(
-            objective=objective)
-        questions_response = await utils.strict_json_retry(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            output_format={
-                'questions': 'Array of strings which are questions to ask, type: Array[str]'
-            },
-            llm=utils.llm(self.model_name))
-
-        questions = questions_response['questions']
-        self.logger.info("Questions: %s", questions)
-
-        async def ask_aider(question: str) -> str:
-            query_message = PlannerAgentPrompts.AIDER_QUERY_QUESTION.format(
-                question=question)
-            response = ""
-            for _ in range(self.max_reflections):
-                curr_response = ""
-                async for response_chunk in self.agent_manager.main_repo_agent.ask(query_message):
-                    curr_response += response_chunk
-                response += curr_response + "\n\n"
-                if self.agent_manager.main_repo_agent.coder.reflected_message is None:
-                    break
-                query_message = self.agent_manager.main_repo_agent.coder.reflected_message
-            return question, response
-
-        async def limited_ask_aider(semaphore, question):
-            async with semaphore:
-                return await asyncio.to_thread(ask_aider, question)
-
-        semaphore = asyncio.Semaphore(self.max_concurrent_llm_queries)
-
-        gathered_info = []
-        tasks = [limited_ask_aider(semaphore, question)
-                 for question in questions]
-        responses = await asyncio.gather(*tasks)
-        responses = await asyncio.gather(*responses)
-
-        for question, response in responses:
-            gathered_info.append((question, response))
-
-        # Format gathered_info in markdown
-        formatted_gathered_info = ""
-
-        for qn_idx, (question, answer) in enumerate(gathered_info):
-            formatted_gathered_info += f"""
-# Question {qn_idx + 1}
-**Question**: {question}
-**Answer**: {answer}
-
-"""
-        self.logger.info("Gathered Information: %s", formatted_gathered_info)
-
-        # Summarize the gathered information
-        system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_SUMMARIZE_GATHERED_INFO
-        user_prompt = PlannerAgentPrompts.USER_PROMPT_SUMMARIZE_GATHERED_INFO.format(
-            formatted_gathered_info=formatted_gathered_info)
-        summary_response = utils.llm(
-            self.model_name)(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt)
-        self.logger.info("Summary: %s", summary_response)
-        return summary_response
-
     async def generate_subtasks(self, objective: str):
         """
         Generate a list of subtasks to achieve the given objective.
@@ -137,41 +54,129 @@ class PlannerAgent:
         :param objective: The main objective.
         :return: A list of subtasks.
         """
-        # Restate the problem statement
-        system_prompt = """
-You are a requirements analyst tasked with converting objectives into clear, actionable instructions for a software developer.
-Your instructions should be specific, technically accurate, and detailed enough for implementation. 
-Ensure to outline any necessary steps, constraints, and considerations for the development process.
-"""
-        user_prompt = """{objective}"""
-        user_prompt = user_prompt.format(objective=objective)
-        objective = utils.llm(self.model_name)(
-            system_prompt=system_prompt, user_prompt=user_prompt
+        tmp_model_name = self.model_name
+        # Empirically, only these two models have been successful in generating a plan following the format specified.
+        if tmp_model_name not in ["azure/gpt-4o", "bedrock/mistral.mistral-large-2407-v1:0"]:
+            tmp_model_name = "azure/gpt-4o"
+
+        async def query_codebase(query_message: str) -> str:
+            """Ask a Codebase AI assistant questions about the existing codebase
+            The assistant can only read the codebase and answer queries. It cannot run commands, execute files, or edit files."""
+            self.agent_manager.main_repo_agent.reset()
+
+            response = ""
+            for _ in range(3):
+                curr_response = ""
+                async for response_chunk in self.agent_manager.main_repo_agent.ask(query_message):
+                    curr_response += response_chunk
+                response += curr_response + "\n\n"
+                if self.agent_manager.main_repo_agent.coder.reflected_message is None:
+                    break
+                query_message = self.agent_manager.main_repo_agent.coder.reflected_message
+
+            return response
+
+        def finetune_codebase_summary_and_plan(shared_variables, additional_info:str):
+            """Incorporates additional info to summary of codebase, and finetunes the plan"""
+            res = utils.llm(self.model_name)(
+                system_prompt="Finetune the codebase summary with additional infoi. The summary should focus on what are the functionality already implemented, and what functionality is not implemented yet",
+                user_prompt=(
+                    f"**Current summary**: {shared_variables['Summary']} \n\n"
+                    f"**Additional info**: {additional_info} \n\n"
+                ),
+            )
+            shared_variables["Summary"] = res
+
+            res = utils.llm(self.model_name)(
+                system_prompt="""Finetune the plan using additional info.
+
+Ensure each task:
+- Is specific, with a clear, detailed description.
+- Represents a single, actionable step.
+- Contributes directly to the overall goal, avoiding unnecessary or redundant work.
+- Does not suggest non-essential tasks like "document findings."
+- Does not include tasks for building, testing, or deployment unless requested.
+
+Output Format:
+---------------
+
+[Task 1]
+
+<description of task>
+
+[TASK TYPE: <type of task: Enum['Coding', 'Command execution', 'User action']> ]
+
+[Task 2]
+
+<description of task>
+
+[TASK TYPE: <type of task: Enum['Coding', 'Command execution', 'User action']> ]
+
+...
+
+[Task N]
+
+<description of task>
+
+[TASK TYPE: <type of task: Enum['Coding', 'Command execution', 'User action']> ]
+""",
+                user_prompt=(
+                    f"**Existing plan**: {shared_variables['Plan']} \n\n"
+                    f"**Additional info**: {additional_info} \n\n"
+                    f"**Objective**: {objective}"),
+            )
+            shared_variables["Plan"] = res
+
+        from taskgen import AsyncAgent
+        agent = AsyncAgent(
+            'Code planner',
+            "Help user to plan tasks to ensure that the code fufils a requirement. You should ensure that the shared_variable Plan will implement the user's objective.",
+            llm = utils.llm_async(tmp_model_name),
+            shared_variables = {"Plan": "", "Summary": ""},
+            default_to_llm = False,
+            max_subtasks = 10,
+            global_context = "Tentative plan: <Plan>, Tentative summary: <Summary>",
         )
-        self.logger.info("Restated objective: %s", objective)
-        #yield "<info>"
-        #yield f"Restated objective: {objective}"
-        #yield "</info>"
+        agent.assign_functions(function_list=[query_codebase, finetune_codebase_summary_and_plan])
 
-        # Gather necessary information
-        gathered_info_summary = await self.gather_information(objective)
-        if gathered_info_summary is None:
-            system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_GENERATE_SUBTASKS_NO_GATHERED_INFO.format(
-                max_subtasks=self.max_subtasks, gathered_info_summary=gathered_info_summary)
-        else:
-            system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_GENERATE_SUBTASKS.format(
-                max_subtasks=self.max_subtasks, gathered_info_summary=gathered_info_summary)
+        agent.reset()
+        await agent.run(f"User objective: {objective}")
+        
+        if agent.shared_variables["Plan"] == "":
+            self.logger.warning("Plan is empty")
+            yield ["Plan is empty. Either the task was already completed, or an error occurred."]
+            return
+        
+        self.logger.info("Generated plan: %s", agent.shared_variables["Plan"])
 
-        res = await utils.strict_json_retry(
-            system_prompt=system_prompt,
-            user_prompt=f"Objective: {objective}",
-            output_format={'Plan': 'Array of subtasks, type: Array[str]'},
-            llm=utils.llm(self.model_name)
-        )
+        def _parse_tasks(text):
+            # Regular expression to match each task and its task type
+            task_pattern = re.compile(r'\[Task (\d+)\](.*?)\[TASK TYPE: ([\w\s]+)\]', re.DOTALL)
+            
+            # Find all matches in the text
+            tasks = task_pattern.findall(text)
+            
+            # Extract tasks and task types
+            parsed_tasks = []
+            for task in tasks:
+                task_number = task[0]
+                task_body = task[1].strip()
+                task_type = task[2]
+                parsed_tasks.append({
+                    'task_number': task_number,
+                    'task_body': task_body,
+                    'task_type': task_type
+                })
+            
+            return parsed_tasks
 
-        #yield "<output>"
-        yield res['Plan']
-        #yield "</output>"
+        # TODO: add a check for number of tasks in agent.shared_variables["Plan"], and match with parsed
+        # if not equal, send a llm query to fix formatting
+
+        parsed_tasks = _parse_tasks(agent.shared_variables["Plan"])
+        self.logger.info("Parsed tasks: %s", parsed_tasks)
+        yield parsed_tasks
+
 
     def finetune_subtasks(self, objective: str, instruction: str) -> list[str]:
         """

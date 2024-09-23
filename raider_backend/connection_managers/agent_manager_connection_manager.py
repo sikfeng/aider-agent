@@ -41,7 +41,7 @@ class AgentManagerConnectionManager(BaseConnectionManager):
         elif method == "generate_subtasks":
             objective = params.get("objective")
             async for response in agent_manager.generate_subtasks(objective):
-                await self.send_message(websocket, {"result": response}, session_id)
+                await self.send_message(websocket, {"result": json.dumps(response)}, session_id)
 
         elif method == "run_subtask":
             subtask = params.get("subtask")

@@ -100,7 +100,7 @@ class BaseRepoAgent:
         accumulated context or data. It is useful for starting fresh without
         any prior context influencing the agent's behavior.
         """
-        self.coder.commands.cmd_reset()
+        self.coder.commands.cmd_reset(None)
 
     def undo(self) -> None:
         """

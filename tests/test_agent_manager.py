@@ -46,7 +46,8 @@ async def test():
     uri = f"ws://localhost:{PORT}/ws/tmp_session_id"
 
     external_repos = ["../continue"]
-    task = "Make a basic hello world vscode extension"
+    #task = "Make a basic hello world vscode extension"
+    task = "Add a reactjs webview to the extension"
 
     for repo_dir in external_repos:
         logger.info("Initializing external repo agent for %s", repo_dir)
@@ -58,6 +59,7 @@ async def test():
     logger.info("Generating subtasks for task: %s", task)
     subtasks_response = await test_websocket_endpoint(uri, "generate_subtasks", {"objective": task})
     subtasks = json.loads(subtasks_response)
+    return
 
     for subtask in subtasks:
         logger.info("Running subtask: %s", subtask)
