@@ -86,7 +86,7 @@ class PlannerAgent:
                 curr_response = ""
                 async for response_chunk in self.agent_manager.main_repo_agent.ask(query_message):
                     curr_response += response_chunk
-                response += curr_response + "\n"
+                response += curr_response + "\n\n"
                 if self.agent_manager.main_repo_agent.coder.reflected_message is None:
                     break
                 query_message = self.agent_manager.main_repo_agent.coder.reflected_message
@@ -130,7 +130,7 @@ class PlannerAgent:
         self.logger.info("Summary: %s", summary_response)
         return summary_response
 
-    async def generate_subtasks(self, objective: str) -> list[str]:
+    async def generate_subtasks(self, objective: str):
         """
         Generate a list of subtasks to achieve the given objective.
 
@@ -149,6 +149,9 @@ Ensure to outline any necessary steps, constraints, and considerations for the d
             system_prompt=system_prompt, user_prompt=user_prompt
         )
         self.logger.info("Restated objective: %s", objective)
+        #yield "<info>"
+        #yield f"Restated objective: {objective}"
+        #yield "</info>"
 
         # Gather necessary information
         gathered_info_summary = await self.gather_information(objective)
@@ -166,7 +169,9 @@ Ensure to outline any necessary steps, constraints, and considerations for the d
             llm=utils.llm(self.model_name)
         )
 
-        return res['Plan']
+        #yield "<output>"
+        yield res['Plan']
+        #yield "</output>"
 
     def finetune_subtasks(self, objective: str, instruction: str) -> list[str]:
         """

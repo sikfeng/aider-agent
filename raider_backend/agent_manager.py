@@ -158,7 +158,7 @@ class AgentManager:
             self.logger.error("PlannerAgent failed to initialize.")
             return False
 
-    async def generate_subtasks(self, objective: str) -> List[str]:
+    async def generate_subtasks(self, objective: str):
         """
         Generate a list of subtasks to achieve the given objective.
 
@@ -166,7 +166,8 @@ class AgentManager:
         :return: A list of subtasks.
         """
         self.logger.info("Generating subtasks for %s.", objective)
-        return await self.planner_agent.generate_subtasks(objective)
+        async for partial_response in self.planner_agent.generate_subtasks(objective):
+            yield partial_response
 
     def finetune_subtasks(self, objective: str, instruction: str) -> List[str]:
         """
