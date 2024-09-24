@@ -7,3 +7,4 @@ strictjson
 aider-chat
 websockets
 boto3
+taskgen-ai

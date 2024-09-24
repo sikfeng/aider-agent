@@ -38,13 +38,14 @@ class BaseHandler(ABC):
     def initialize_agent(self, agent_id: str, **kwargs):
         pass
 
-    def _init_process(self, agent_id: str, command: str, max_retries: int = 5):
+    def _init_process(self, agent_id: str, command: str, max_retries: int = 5, directory: str = "."):
         for _ in range(max_retries):
             port = self.get_free_port()
             self.logger.info(f"Attempting to start process for agent {agent_id} on port {port}")
             process = subprocess.Popen(
                 command.format(port=port),
-                shell=True
+                shell=True,
+                cwd=directory,
             )
             if self.wait_for_ping(port):
                 self.logger.info(f"Process for agent {agent_id} on port {port} successfully initialized.")

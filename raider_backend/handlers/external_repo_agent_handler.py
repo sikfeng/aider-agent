@@ -37,7 +37,7 @@ class ExternalRepoAgentHandler(BaseHandler):
     def initialize_agent(self, agent_id: str, repo_dir: str, model_name: str = "azure/gpt-4o"):
         repo_dir = utils.get_absolute_path(repo_dir)
         command = f"exec init_ext_repo_agent --port {{port}} --model-name {model_name}"
-        process, port = self._init_process(agent_id, command)
+        process, port = self._init_process(agent_id, command, directory=repo_dir)
         if process and port:
             self.agents[agent_id] = {
                 'process': process,
@@ -50,8 +50,9 @@ class ExternalRepoAgentHandler(BaseHandler):
 
     async def handle_message(self, agent_id: str, session_id: str, method: str, params: dict):
         if agent_id not in self.agents:
-            self.logger.info("Agent %s not yet initialized", agent_id)
-            self.initialize_agent(agent_id, self.agents[agent_id]['repo_dir'], self.agents[agent_id]['model_name'])
+            self.logger.warning("Agent %s not yet initialized", agent_id)
+            yield {"warning": "Agent not initialized yey"}
+            return
 
         port = self.agents[agent_id]['port']
         async with websockets.connect(f"ws://localhost:{port}/ws/{session_id}", ping_interval=None) as websocket:
@@ -60,24 +61,26 @@ class ExternalRepoAgentHandler(BaseHandler):
                 "params": params or {}
             }
             await websocket.send(json.dumps(request))
-            response_data = []
             while True:
                 response = await websocket.recv()
                 partial_response_data = json.loads(response)
                 if partial_response_data == BaseConnectionManager.KEEP_ALIVE_PING:
                     continue  # Ignore keepalive pings
                 elif partial_response_data == BaseConnectionManager.END_OF_MESSAGE_RESPONSE:
-                    return response_data
+                    return
 
                 if "info" in partial_response_data:
                     self.logger.info(partial_response_data["info"])
+                    yield partial_response_data
                 elif "warning" in partial_response_data:
                     self.logger.warning(partial_response_data["warning"])
+                    yield partial_response_data
                 elif "error" in partial_response_data:
                     self.logger.error(partial_response_data["error"])
+                    yield partial_response_data
                 elif "result" in partial_response_data:
-                    response_data += partial_response_data["result"]
                     self.logger.info(partial_response_data["result"])
+                    yield partial_response_data
 
     async def run(self, agent_id: str, msg: str) -> str:
         return await self.handle_message(agent_id, "session", "run", {"msg": msg})
@@ -88,13 +91,14 @@ class ExternalRepoAgentHandler(BaseHandler):
             yield chunk
 
     async def ask(self, agent_id: str, msg: str) -> AsyncGenerator[str, None]:
-        response = await self.handle_message(agent_id, "session", "ask", {"msg": msg})
-        for chunk in response.split():  # This is a simplification; you might need to adjust based on actual response format
-            yield chunk
+        async for partial_response in self.handle_message(agent_id, "session", "ask", {"msg": msg}):
+            yield partial_response
 
-    async def get_repo_map(self, agent_id: str) -> str:
-        return await self.handle_message(agent_id, "session", "get_repo_map", {})
+    async def get_repo_map(self, agent_id: str) -> AsyncGenerator[str, None]:
+        async for partial_response in self.handle_message(agent_id, "session", "get_repo_map", {}):
+            yield partial_response
 
+    # TODO: needs cleaning up
     async def find_relevant_code(self, agent_id: str, task: str):
         repo_dir = self.agents[agent_id]['repo_dir']
         model_name = self.agents[agent_id]['model_name']

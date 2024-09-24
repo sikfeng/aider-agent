@@ -29,6 +29,12 @@ class ExternalRepoAgent(BaseRepoAgent):
         # Expecting that external repo will not be modified
         # Hence we simply store the repo_map and just retrieve it.
         return self.repo_map
+ 
+    def run(self, msg):
+        raise RuntimeError("ExternalRepoAgent should NOT run any tasks!")
+
+    def run_stream(self, msg):
+        raise RuntimeError("ExternalRepoAgent should NOT run any tasks!")
 
 def main() -> None:
     """

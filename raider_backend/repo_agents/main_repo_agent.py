@@ -61,6 +61,7 @@ class MainRepoAgent(BaseRepoAgent):
                     "Error adding %s, skipping.", code_snippet_filename)
 
         # TODO: move to prompts.py
+        # TODO: consider using taskgen to do this
         message = f"""
 You are to complete the following task:
 {subtask}
@@ -115,12 +116,7 @@ If you wish to edit a file, add the file to the chat.
 
             if shell_cmds is not None:
                 for command in shell_cmds:
-                    yield f"\n<suggested_cmd>{command}</suggested_cmd>\n"
-                    # Optionally, you can execute the command here if needed
-                    # cmd_response = self.main_repo_agent.run_cmd(command)
-                    # yield f"<cmd_response>{cmd_response}</cmd_response>"
-
-            # Use the new function to find files to add
+                    yield {"info": {"suggested_cmd": command}}
 
             if self.coder.reflected_message is None:
                 break

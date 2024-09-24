@@ -31,26 +31,21 @@ class RepoAgentConnectionManager(BaseConnectionManager):
             result = repo_agent.run(msg)
             response = {"result": result}
             await self.send_message(websocket, response, session_id)
-
         elif method == "run_stream":
             msg = params.get("msg")
             async for partial_response in repo_agent.run_stream(msg):
-                await self.send_message(websocket, {"result": partial_response}, session_id)
-
+                await self.send_message(websocket, partial_response, session_id)
         elif method == "ask":
             msg = params.get("msg")
             async for partial_response in repo_agent.ask(msg):
                 await self.send_message(websocket, {"result": partial_response}, session_id)
-
         elif method == "get_repo_map":
             result = repo_agent.get_repo_map()
             response = {"result": result}
             await self.send_message(websocket, response, session_id)
-
         elif method == "ping":
             response = {"result": "pong"}
             await self.send_message(websocket, response, session_id)
-
         else:
             await self.send_message(websocket, {"error": f"Unknown method: {method}"}, session_id)
 
