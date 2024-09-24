@@ -111,7 +111,10 @@ class ExternalRepoAgentHandler(BaseHandler):
         Path(code_snippet_filename).unlink(missing_ok=True)
 
         # Step 1: Get list of relevant files
-        repo_map = await self.get_repo_map(agent_id)
+        async for response in self.get_repo_map(agent_id):
+            # repomap should be a single response
+            repo_map = response
+
 
         system_prompt = ExternalRepoAgentHandlerPrompts.SYSTEM_PROMPT_FIND_RELEVANT_FILENAMES.format(
             repo_map=repo_map)
