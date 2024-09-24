@@ -53,11 +53,6 @@ class AgentManagerConnectionManager(BaseConnectionManager):
             async for response in agent_manager.run_subtask(subtask):
                 await self.send_message(websocket, {"result": response}, session_id)
 
-        elif method == "run_multiple_subtasks":
-            subtasks = params.get("subtasks")
-            async for response in agent_manager.run_multiple_subtasks(subtasks):
-                await self.send_message(websocket, {"result": response}, session_id)
-
         elif method == "undo":
             agent_manager.undo()
             await self.send_message(websocket, {"result": "Undo completed"}, session_id)

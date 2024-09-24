@@ -60,28 +60,8 @@ class MainRepoAgent(BaseRepoAgent):
                 self.logger.warning(
                     "Error adding %s, skipping.", code_snippet_filename)
 
-        # TODO: I dont like to rely on past completed tasks. I plan to remove this in the future
-        completed_tasks = ""
-
-        if self.agent_manager.completed_subtasks:
-            completed_tasks = "These are the tasks that you have already completed:\n"
-            completed_tasks += "\n".join(
-                [f"{j+1}: {t}" for j,
-                 t in enumerate(self.agent_manager.completed_subtasks)]
-            )
-
-        message = ""
-        if self.agent_manager.completed_subtasks:
-            message = f"""{completed_tasks}
-
-Based on the above completed tasks, you are to complete the following task:
-{subtask}
-
-If the files you wish to write to do not exist yet, automatically create them.
-"""
-        else:
-            message = f"""{completed_tasks}
-
+        # TODO: move to prompts.py
+        message = f"""
 You are to complete the following task:
 {subtask}
 
@@ -94,7 +74,7 @@ If you wish to edit a file, add the file to the chat.
             self.logger.debug("Message: %s", message)
             async for partial_response in self.run_stream(message):
                 curr_response += partial_response
-                yield partial_response
+                yield {"result": partial_response}
 
             response += curr_response
 

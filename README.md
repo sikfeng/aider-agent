@@ -135,10 +135,6 @@ The system provides a WebSocket endpoint for interacting with the agents:
     - **Params**: 
       - `subtask` (str): The subtask to run.
 
-  - `run_multiple_subtasks`: Runs a list of subtasks.
-    - **Params**: 
-      - `subtasks` (List[str]): The list of subtasks to run.
-
   - `undo`: Undoes the last commit.
 
   - `shutdown`: Shuts down the AgentManager.

@@ -192,22 +192,6 @@ class AgentManager:
         """
         self.main_repo_agent.undo()
 
-    async def run_multiple_subtasks(
-            self, subtasks: List[str]) -> AsyncGenerator[str, None]:
-        """
-        Run the subtasks.
-
-        :param subtasks: The list of subtasks to run.
-        :return: An async generator yielding parts of the response.
-        """
-        responses = []
-        for subtask in subtasks:
-            response = ""
-            async for partial_response in self.run_subtask(subtask):
-                response += partial_response
-                yield partial_response
-            responses.append(response)
-
     def get_external_repo_agents(self) -> List[str]:
         """
         Get a list of all initialized external repo agents.
