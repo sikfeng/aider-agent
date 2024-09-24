@@ -24,6 +24,10 @@ class AgentManagerConnectionManager(BaseConnectionManager):
 
         agent_manager = self.agent_managers[session_id]
 
+        # TODO: need to standardize the AgentManager methods to yield data, 
+        # and for the methods to format them as info, warning, error, or results
+        # TODO: create classes for each packet to standardize the format
+
         if method == "init_external_repo_agent":
             repo_dir = params.get("repo_dir")
             model_name = params.get("model_name", "azure/gpt-4o")
@@ -41,7 +45,8 @@ class AgentManagerConnectionManager(BaseConnectionManager):
         elif method == "generate_subtasks":
             objective = params.get("objective")
             async for response in agent_manager.generate_subtasks(objective):
-                await self.send_message(websocket, {"result": json.dumps(response)}, session_id)
+                self.logger.info("Response: %s", response)
+                await self.send_message(websocket, response, session_id)
 
         elif method == "run_subtask":
             subtask = params.get("subtask")
@@ -65,4 +70,5 @@ class AgentManagerConnectionManager(BaseConnectionManager):
         else:
             await self.send_message(websocket, {"error": f"Unknown method: {method}"}, session_id)
 
-        await self.send_message(websocket, self.END_OF_MESSAGE_RESPONSE, session_id)
+        self.logger.info("End of message.")
+        await self.send_message(websocket, BaseConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)

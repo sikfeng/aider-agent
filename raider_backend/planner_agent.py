@@ -43,7 +43,7 @@ class PlannerAgent:
         :param agent_manager: The AgentManager instance.
         """
         self.model_name: str = model_name
-        self.logger = logging.getLogger("PlannerAgent")
+        self.logger = logging.getLogger(self.__class__.__name__)
         self.map_tokens: int = map_tokens
         self.agent_manager: 'AgentManager' = agent_manager
         self.max_iterations: int = max_iterations
@@ -126,14 +126,16 @@ class PlannerAgent:
             await agent.run(f"User objective: {objective}", num_subtasks=1)
             if agent.shared_variables["Plan"]:
                 self.logger.info("Tentative plan: %s", agent.shared_variables["Plan"])
+                yield {"info": {"Plan": agent.shared_variables["Plan"]}}
             else:
                 self.logger.info("No tentative plan yet.")
+                yield {"info": {"Plan": "No tentative plan yet."}}
         else:
             self.logger.warning("Planner exceeded maximum iterations.")
         
-        if agent.shared_variables["Plan"] == "":
+        if not agent.shared_variables["Plan"]:
             self.logger.warning("Plan is empty")
-            yield ["Plan is empty. Either the task was already completed, or an error occurred."]
+            yield {"warning": {"Plan": "Plan is empty. Either the task was already completed and no plan is necessary, or an error had occurred."}}
             return
         
         self.logger.info("Generated plan: %s", agent.shared_variables["Plan"])
@@ -148,11 +150,9 @@ class PlannerAgent:
             # Extract tasks and task types
             parsed_tasks = []
             for task in tasks:
-                task_number = task[0]
                 task_body = task[1].strip()
                 task_type = task[2]
                 parsed_tasks.append({
-                    'task_number': task_number,
                     'task_body': task_body,
                     'task_type': task_type
                 })
@@ -164,7 +164,7 @@ class PlannerAgent:
 
         parsed_tasks = _parse_tasks(agent.shared_variables["Plan"])
         self.logger.info("Parsed tasks: %s", parsed_tasks)
-        yield parsed_tasks
+        yield {"result": parsed_tasks}
 
     # TODO: refactor agent to be a class field rather than a method variable
     # TODO: add a method to force a plan to be generated based on current conversation history

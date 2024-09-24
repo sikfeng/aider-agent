@@ -11,7 +11,7 @@ class BaseConnectionManager(ABC):
     Manages WebSocket connections and message buffering.
     """
     END_OF_MESSAGE_RESPONSE = {"<END_OF_MESSAGE>": ""}
-    KEEP_ALIVE_PING = {"<PING>", ""}
+    KEEP_ALIVE_PING = {"<PING>": ""}
 
     def __init__(self) -> None:
         """

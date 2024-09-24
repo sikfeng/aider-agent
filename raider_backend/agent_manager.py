@@ -240,7 +240,7 @@ def main():
         description="Run AgentManager with FastAPI WebSocket")
     parser.add_argument("--port", type=int, default=8000,
                         help="Port for the FastAPI server")
-    parser.add_argument("--main-repo-dir", type=str,
+    parser.add_argument("--main-repo-dir", type=str, required=True,
                         help="Main repository directory")
     parser.add_argument("--model-name", type=str, default="azure/gpt-4o",
                         help="Model name for the AgentManager")
