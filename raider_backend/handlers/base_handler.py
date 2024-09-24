@@ -38,7 +38,7 @@ class BaseHandler(ABC):
     def initialize_agent(self, agent_id: str, **kwargs):
         pass
 
-    def _init_process(self, agent_id: str, command: str, max_retries: int = 5, directory: str = "."):
+    def _init_process(self, agent_id: str, command: str, max_retries: int = 5, directory: str = ".", timeout: int = 10):
         for _ in range(max_retries):
             port = self.get_free_port()
             self.logger.info(f"Attempting to start process for agent {agent_id} on port {port}")
@@ -47,7 +47,7 @@ class BaseHandler(ABC):
                 shell=True,
                 cwd=directory,
             )
-            if self.wait_for_ping(port):
+            if self.wait_for_ping(port, timeout=timeout):
                 self.logger.info(f"Process for agent {agent_id} on port {port} successfully initialized.")
                 return process, port
             if process.poll() is None:

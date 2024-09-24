@@ -19,9 +19,9 @@ from distro import name as distro_name
 from fastapi import FastAPI
 import uvicorn
 
-from . import utils
-from .handlers.external_repo_agent_handler import ExternalRepoAgentHandler, InitExternalRepoAgentError
-from .planner_agent import PlannerAgent
+from raider_backend import utils
+from raider_backend.handlers.external_repo_agent_handler import ExternalRepoAgentHandler, InitExternalRepoAgentError
+from raider_backend.planner_agent import PlannerAgent
 from raider_backend.repo_agents.main_repo_agent import MainRepoAgent
 from raider_backend.logger import LOG_CONFIG
 
@@ -40,7 +40,7 @@ class AgentManager:
         self.planner_agent: Optional[PlannerAgent] = None
         self.main_repo_agent: Optional[MainRepoAgent] = None
         self.external_repo_agent_handler: ExternalRepoAgentHandler = ExternalRepoAgentHandler()
-        self.logger = logging.getLogger("AgentManager")
+        self.logger = logging.getLogger(self.__class__.__name__)
         self.model_name = model_name
         self.max_reflections = max_reflections
         self.max_concurrent_queries = max_concurrent_queries
@@ -71,8 +71,6 @@ class AgentManager:
 
         self.os_name = _os_name()
         self.shell = _shell_name()
-
-        self.completed_subtasks: List[str] = []
 
         self.init_planner_agent()
         self.init_main_repo_agent()
@@ -113,7 +111,8 @@ class AgentManager:
             self.external_repo_agent_handler.initialize_agent(
                 agent_id=agent_id,
                 repo_dir=repo_dir,
-                model_name=model_name
+                model_name=model_name,
+                timeout=timeout
             )
             self.logger.info(
                 "Successfully initialized an ExternalRepoAgent on %s.",
@@ -184,6 +183,16 @@ class AgentManager:
         :return: An async generator yielding parts of the response.
         """
         async for response in self.main_repo_agent.run_subtask(subtask):
+            yield response
+
+    async def generate_commands(self, subtask: str) -> AsyncGenerator[str, None]:
+        """
+        Generate commands to perform a subtask.
+
+        :param subtask: The subtask to complete.
+        :return: An async generator yielding parts of the response.
+        """
+        async for response in self.main_repo_agent.generate_commands(subtask):
             yield response
 
     def undo(self) -> None:

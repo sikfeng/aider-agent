@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import AsyncGenerator, Optional, List, TYPE_CHECKING
+from typing import AsyncGenerator
 
 from aider.coders import Coder
 from aider.models import Model

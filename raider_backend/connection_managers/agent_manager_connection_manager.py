@@ -29,11 +29,7 @@ class AgentManagerConnectionManager(BaseConnectionManager):
         # TODO: create classes for each packet to standardize the format
 
         if method == "init_external_repo_agent":
-            repo_dir = params.get("repo_dir")
-            model_name = params.get("model_name", "azure/gpt-4o")
-            timeout = params.get("timeout", 10)
-            result = agent_manager.init_external_repo_agent(
-                repo_dir, model_name, timeout)
+            result = agent_manager.init_external_repo_agent(**params)
             response = {"result": "Success" if result else "Failure"}
             await self.send_message(websocket, response, session_id)
 
@@ -43,14 +39,16 @@ class AgentManagerConnectionManager(BaseConnectionManager):
             await self.send_message(websocket, response, session_id)
 
         elif method == "generate_subtasks":
-            objective = params.get("objective")
-            async for response in agent_manager.generate_subtasks(objective):
+            async for response in agent_manager.generate_subtasks(**params):
                 self.logger.info("Response: %s", response)
                 await self.send_message(websocket, response, session_id)
 
         elif method == "run_subtask":
-            subtask = params.get("subtask")
-            async for response in agent_manager.run_subtask(subtask):
+            async for response in agent_manager.run_subtask(**params):
+                await self.send_message(websocket, {"result": response}, session_id)
+        
+        elif method == "generate_commands":
+            async for response in agent_manager.generate_commands(**params):
                 await self.send_message(websocket, {"result": response}, session_id)
 
         elif method == "undo":

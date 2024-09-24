@@ -27,17 +27,14 @@ class RepoAgentConnectionManager(BaseConnectionManager):
         repo_agent = self.repo_agents[session_id]
 
         if method == "run":
-            msg = params.get("msg")
-            result = repo_agent.run(msg)
+            result = repo_agent.run(**params)
             response = {"result": result}
             await self.send_message(websocket, response, session_id)
         elif method == "run_stream":
-            msg = params.get("msg")
-            async for partial_response in repo_agent.run_stream(msg):
+            async for partial_response in repo_agent.run_stream(**params):
                 await self.send_message(websocket, partial_response, session_id)
         elif method == "ask":
-            msg = params.get("msg")
-            async for partial_response in repo_agent.ask(msg):
+            async for partial_response in repo_agent.ask(**params):
                 await self.send_message(websocket, {"result": partial_response}, session_id)
         elif method == "get_repo_map":
             result = repo_agent.get_repo_map()

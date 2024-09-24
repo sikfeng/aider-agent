@@ -49,8 +49,8 @@ async def test():
     uri = f"ws://localhost:{PORT}/ws/tmp_session_id"
 
     external_repos = ["../continue"]
-    #task = "Make a basic hello world vscode extension"
-    task = "Add a reactjs webview to the extension"
+    task = "Make a basic hello world vscode extension"
+    #task = "Add a reactjs webview to the extension"
 
     for repo_dir in external_repos:
         logger.info("Initializing external repo agent for %s", repo_dir)
@@ -66,8 +66,9 @@ async def test():
         logger.info("Running subtask: %s", subtask)
         if subtask["task_type"] == "User action":
             logger.info("Current task relies on user action, skipping")
-        else:
-            # TODO: handle Command execution and Coding task seperately
+        elif subtask["task_type"] == "Command execution":
+            await test_websocket_endpoint(uri, "generate_commands", {"subtask": subtask["task_body"]})
+        elif subtask["task_type"] == "Coding":
             await test_websocket_endpoint(uri, "run_subtask", {"subtask": subtask})
 
     await test_websocket_endpoint(uri, "undo")

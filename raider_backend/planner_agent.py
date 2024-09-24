@@ -126,10 +126,10 @@ class PlannerAgent:
             await agent.run(f"User objective: {objective}", num_subtasks=1)
             if agent.shared_variables["Plan"]:
                 self.logger.info("Tentative plan: %s", agent.shared_variables["Plan"])
-                yield {"info": {"Plan": agent.shared_variables["Plan"]}}
+                yield {"info": {"Tentative plan": agent.shared_variables["Plan"]}}
             else:
                 self.logger.info("No tentative plan yet.")
-                yield {"info": {"Plan": "No tentative plan yet."}}
+                yield {"info": {"Tentative plan": "No tentative plan yet."}}
         else:
             self.logger.warning("Planner exceeded maximum iterations.")
         

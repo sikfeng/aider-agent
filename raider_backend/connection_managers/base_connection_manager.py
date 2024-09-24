@@ -20,7 +20,7 @@ class BaseConnectionManager(ABC):
         """
         self.active_connections: List[WebSocket] = []
         self.message_buffer: Dict[str, List[Dict[str, Any]]] = {}
-        self.logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger(self.__class__.__name__)
 
     async def _on_connect(self, websocket: WebSocket, session_id: str) -> None:
         """

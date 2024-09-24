@@ -4,6 +4,7 @@ import re
 from typing import AsyncGenerator, Optional, List, TYPE_CHECKING
 
 from raider_backend.repo_agents.base_repo_agent import BaseRepoAgent
+from raider_backend import utils
 
 if TYPE_CHECKING:
     from raider_backend.agent_manager import AgentManager
@@ -125,4 +126,19 @@ If you wish to edit a file, add the file to the chat.
             message = self.coder.reflected_message
 
         self.commit()
-        self.agent_manager.completed_subtasks.append(subtask)
+    
+    async def generate_commands(self, subtask: str) -> AsyncGenerator[str, None]:
+        system_prompt =  """
+Provide only {shell} commands for {os} without any description.
+If there is a lack of details, provide most logical solution.
+Ensure the output is a valid shell command.
+If multiple steps required try to combine them together using &&.
+Provide only plain text without Markdown formatting.
+Do not provide markdown formatting such as ```.
+""".format(shell = self.agent_manager.shell, os=self.agent_manager.os_name)
+        user_prompt = subtask
+        response = utils.llm(self.model_name)(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt
+            )
+        yield {"result": response}

@@ -14,14 +14,13 @@ import argparse
 import logging
 from logging.config import dictConfig
 from pathlib import Path
-import os
 
 from fastapi import FastAPI
 import uvicorn
 
-from . import utils
+from raider_backend import utils
 from raider_backend.connection_managers.launch_connection_manager import LaunchConnectionManager
-from .logger import LOG_CONFIG
+from raider_backend.logger import LOG_CONFIG
 
 conn_manager = LaunchConnectionManager()
 

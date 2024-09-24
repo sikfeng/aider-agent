@@ -5,7 +5,7 @@ class, method, and function definitions using the tree-sitter library.
 from grep_ast import filename_to_lang
 from tree_sitter_languages import get_parser
 
-from . import utils
+from raider_backend import utils
 
 
 def get_class_method_function_defs(
