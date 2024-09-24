@@ -45,6 +45,7 @@ class MainRepoAgent(BaseRepoAgent):
                                for repo_dir
                                in self.agent_manager.external_repo_agent_handler.agents.keys()))
 
+        # TODO: I notice that the code snippets are often not found, need to investigate
         for repo_path in self.agent_manager.external_repo_agent_handler.agents.keys():
             code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.', '')}.txt"
             if not Path(code_snippet_filename).is_file():
@@ -116,7 +117,7 @@ If you wish to edit a file, add the file to the chat.
 
             if shell_cmds is not None:
                 for command in shell_cmds:
-                    yield {"info": {"suggested_cmd": command}}
+                    yield {"info": {"suggested_cmd": command.strip()}}
 
             if self.coder.reflected_message is None:
                 break
