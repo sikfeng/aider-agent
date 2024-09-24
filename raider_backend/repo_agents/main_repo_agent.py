@@ -5,6 +5,7 @@ from typing import AsyncGenerator, Optional, List, TYPE_CHECKING
 
 from raider_backend.repo_agents.base_repo_agent import BaseRepoAgent
 from raider_backend import utils
+from raider_backend.prompts import MainRepoAgentPrompts
 
 if TYPE_CHECKING:
     from raider_backend.agent_manager import AgentManager
@@ -46,7 +47,8 @@ class MainRepoAgent(BaseRepoAgent):
                                for repo_dir
                                in self.agent_manager.external_repo_agent_handler.agents.keys()))
 
-        # TODO: I notice that the code snippets are often not found, need to investigate
+        # TODO: I notice that the code snippets are always not found
+        # seems to be because external repo handler saves the files to a different name
         for repo_path in self.agent_manager.external_repo_agent_handler.agents.keys():
             code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.', '')}.txt"
             if not Path(code_snippet_filename).is_file():
@@ -128,17 +130,10 @@ If you wish to edit a file, add the file to the chat.
         self.commit()
     
     async def generate_commands(self, subtask: str) -> AsyncGenerator[str, None]:
-        system_prompt =  """
-Provide only {shell} commands for {os} without any description.
-If there is a lack of details, provide most logical solution.
-Ensure the output is a valid shell command.
-If multiple steps required try to combine them together using &&.
-Provide only plain text without Markdown formatting.
-Do not provide markdown formatting such as ```.
-""".format(shell = self.agent_manager.shell, os=self.agent_manager.os_name)
-        user_prompt = subtask
+        system_prompt = MainRepoAgentPrompts.SYSTEM_PROMPT_GENERATE_SHELL_CMD.format(shell = self.agent_manager.shell, os=self.agent_manager.os_name)
+        user_prompt = MainRepoAgentPrompts.SYSTEM_PROMPT_GENERATE_SHELL_CMD.format(subtask=subtask)
         response = utils.llm(self.model_name)(
             system_prompt=system_prompt,
             user_prompt=user_prompt
-            )
-        yield {"result": response}
+        )
+        yield {"result": {"suggested_cmd": response}}

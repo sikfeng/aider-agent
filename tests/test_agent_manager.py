@@ -69,7 +69,7 @@ async def test():
         elif subtask["task_type"] == "Command execution":
             await test_websocket_endpoint(uri, "generate_commands", {"subtask": subtask["task_body"]})
         elif subtask["task_type"] == "Coding":
-            await test_websocket_endpoint(uri, "run_subtask", {"subtask": subtask})
+            await test_websocket_endpoint(uri, "run_subtask", {"subtask": subtask["task_body"]})
 
     await test_websocket_endpoint(uri, "undo")
 

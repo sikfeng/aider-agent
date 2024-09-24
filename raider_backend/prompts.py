@@ -120,3 +120,20 @@ Determine which ones may be useful for our task, as well as an explanation of wh
 Task:
 {task}
 """
+
+class MainRepoAgentPrompts:
+    """
+    Contains prompt templates for MainRepoAgent
+    """
+    SYSTEM_PROMPT_GENERATE_SHELL_CMD = """
+Provide only {shell} commands for {os} without any description.
+If there is a lack of details, provide most logical solution.
+Ensure the output is a valid shell command.
+If multiple steps required try to combine them together using &&.
+Provide only plain text without Markdown formatting.
+Do not provide markdown formatting such as ```.
+"""
+
+    USER_PROMPT_GENERATE_SHELL_CMD = """
+{subtask}
+"""
