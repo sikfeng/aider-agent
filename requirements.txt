@@ -4,7 +4,7 @@ types-redis
 uvicorn
 litellm>=1.43.19
 strictjson
-aider-chat
+aider-chat==0.57.1
 websockets
 boto3
 taskgen-ai

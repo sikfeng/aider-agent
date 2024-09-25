@@ -43,6 +43,7 @@ class BaseRepoAgent:
             io=self.io,
             map_tokens=map_tokens,
             suggest_shell_commands=False,
+            chat_language="English",
         )
 
     def run(self, msg: str) -> str:
