@@ -22,10 +22,16 @@ from raider_backend import utils
 from raider_backend.connection_managers.launch_connection_manager import LaunchConnectionManager
 from raider_backend.logger import LOG_CONFIG
 
+# Initialize the LaunchConnectionManager
 conn_manager = LaunchConnectionManager()
 
+# Set up logging
 logger = logging.getLogger("WebSocketEndpoint")
+
+# Initialize FastAPI application
 app = FastAPI()
+
+# Add WebSocket route to the application
 app.add_api_websocket_route(
     "/ws/{session_id}",
     conn_manager.websocket_endpoint)
@@ -34,10 +40,18 @@ app.add_api_websocket_route(
 def main() -> None:
     """
     Main function to run the application.
+
+    This function sets up command-line arguments, configures logging,
+    and starts the FastAPI application using Uvicorn.
+
+    :return: None
     """
+    # Set up command-line argument parser
     parser = argparse.ArgumentParser(
         description="Launch the AgentManager with a Websocket endpoint.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    
+    # Add command-line arguments
     parser.add_argument(
         '--port',
         type=int,
@@ -48,17 +62,25 @@ def main() -> None:
         type=str,
         help='Path to logfile',
         default="/tmp/manager.log")
+    
+    # Parse command-line arguments
     args = parser.parse_args()
 
+    # Configure logging
     LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(
         args.logfile)
+    
+    # Remove existing log file if it exists
     if Path(LOG_CONFIG['handlers']['fileHandler']['filename']).is_file():
         Path(LOG_CONFIG['handlers']['fileHandler']['filename']).unlink()
+    
+    # Apply logging configuration
     dictConfig(LOG_CONFIG)
 
+    # Run the FastAPI application using Uvicorn
     uvicorn.run(app, host="0.0.0.0", port=args.port)
 
 
-# Run the application with Uvicorn
+# Run the application with Uvicorn when the script is executed directly
 if __name__ == "__main__":
     main()

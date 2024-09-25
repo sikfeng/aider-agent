@@ -221,14 +221,17 @@ class AgentManager:
         return "shutdown"
 
 def main():
+    # Initialize the connection manager for AgentManager
     from raider_backend.connection_managers.agent_manager_connection_manager import AgentManagerConnectionManager
     conn_manager = AgentManagerConnectionManager()
 
+    # Set up FastAPI application
     app = FastAPI()
     app.add_api_websocket_route(
         "/ws/{session_id}", conn_manager.websocket_endpoint)
     app.add_api_route("/ping", conn_manager.ping)
 
+    # Parse command-line arguments
     parser = argparse.ArgumentParser(
         description="Run AgentManager with FastAPI WebSocket")
     parser.add_argument("--port", type=int, default=8000,
@@ -239,11 +242,14 @@ def main():
                         help="Model name for the AgentManager")
     args = parser.parse_args()
 
+    # Configure logging
     dictConfig(LOG_CONFIG)
 
+    # Set the working directory to the main repository directory
     args.main_repo_dir = utils.get_absolute_path(args.main_repo_dir)
     os.chdir(args.main_repo_dir)
 
+    # Run the FastAPI server
     uvicorn.run(app, host="0.0.0.0", port=args.port)
 
 

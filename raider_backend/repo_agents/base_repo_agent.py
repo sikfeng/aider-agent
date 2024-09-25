@@ -101,6 +101,8 @@ class BaseRepoAgent:
         accumulated context or data. It is useful for starting fresh without
         any prior context influencing the agent's behavior.
         """
+        # For some reason cmd_reset accepts a param `args` that is
+        # unused, with no default value either...
         self.coder.commands.cmd_reset(None)
 
     def undo(self) -> None:

@@ -55,6 +55,7 @@ class PlannerAgent:
 
         :param objective: The main objective.
         :return: An asynchronous generator yielding lists of parsed tasks.
+        :yields: Dict containing either 'info', 'warning', or 'result' keys with corresponding values.
         """
         tmp_model_name = self.model_name
         # Empirically, only these two models have been successful in generating a plan following the format specified.
@@ -141,6 +142,12 @@ class PlannerAgent:
         self.logger.info("Generated plan: %s", agent.shared_variables["Plan"])
 
         def _parse_tasks(text):
+            """
+            Parse the generated plan text into a list of tasks.
+
+            :param text: The plan text to parse.
+            :return: A list of dictionaries containing 'task_body' and 'task_type' for each task.
+            """
             # Regular expression to match each task and its task type
             task_pattern = re.compile(r'\[Task (\d+)\](.*?)\[TASK TYPE: ([\w\s]+)\]', re.DOTALL)
             
@@ -182,5 +189,5 @@ class PlannerAgent:
         :param instruction: Additional instructions for finetuning.
         :return: A list of finetuned subtasks.
         """
-        # TODO
+        # TODO: Implement this method
         return []
