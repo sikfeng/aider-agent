@@ -103,7 +103,7 @@ class ExternalRepoAgentHandler(BaseHandler):
         repo_dir = self.agents[agent_id]['repo_dir']
         model_name = self.agents[agent_id]['model_name']
         code_snippet_filename = utils.get_absolute_path(
-            f"code_snippets_{repo_dir.replace('/', '').replace('.','')}.txt")
+            f"code_snippets_{agent_id.replace('/', '').replace('.','')}.txt")
 
         self.logger.info(f"Finding relevant code for agent {agent_id}, task: {task}")
 

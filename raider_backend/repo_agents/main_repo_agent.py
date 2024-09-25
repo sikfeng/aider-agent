@@ -47,10 +47,8 @@ class MainRepoAgent(BaseRepoAgent):
                                for repo_dir
                                in self.agent_manager.external_repo_agent_handler.agents.keys()))
 
-        # TODO: I notice that the code snippets are always not found
-        # seems to be because external repo handler saves the files to a different name
-        for repo_path in self.agent_manager.external_repo_agent_handler.agents.keys():
-            code_snippet_filename = f"code_snippets_{repo_path.replace('/', '').replace('.', '')}.txt"
+        for agent_id in self.agent_manager.external_repo_agent_handler.agents.keys():
+            code_snippet_filename = f"code_snippets_{agent_id.replace('/', '').replace('.', '')}.txt"
             if not Path(code_snippet_filename).is_file():
                 self.logger.warning(
                     "Did not find %s, skipping.", code_snippet_filename)
@@ -64,8 +62,9 @@ class MainRepoAgent(BaseRepoAgent):
                 self.logger.warning(
                     "Error adding %s, skipping.", code_snippet_filename)
 
-        # TODO: move to prompts.py
+        # TODO: move prompt to prompts.py
         # TODO: consider using taskgen to do this
+        # but runtime and llm calls would increase
         message = f"""
 You are to complete the following task:
 {subtask}
@@ -84,38 +83,7 @@ If you wish to edit a file, add the file to the chat.
             response += curr_response
 
             # Check for shell commands and files to add in the response
-            def check_for_shell_cmds_in_response(
-                    aider_response: str) -> Optional[List[str]]:
-                """
-                Check if there are shell commands in the Aider agent
-                response.
-
-                :param aider_response: The response from the
-                    Aider agent.
-                :return: The shell command if found, otherwise None.
-                """
-                # List of shell code block markers
-                shell_markers = [
-                    "bash", "sh", "shell", "cmd", "batch", "powershell", "ps1",
-                    "zsh", "fish", "ksh", "csh", "tcsh"
-                ]
-
-                # Create a regex pattern to match any of the shell code block
-                # markers
-                shell_code_pattern = re.compile(
-                    r'```(?:' + '|'.join(shell_markers) + r')(.*?)```',
-                    re.DOTALL | re.IGNORECASE)
-
-                # Find all matches
-                matches = shell_code_pattern.findall(aider_response)
-
-                if not matches:
-                    return None
-
-                return matches
-
-            # Check for shell commands and files to add in the response
-            shell_cmds = check_for_shell_cmds_in_response(curr_response)
+            shell_cmds = self._check_for_shell_cmds_in_response(curr_response)
             self.logger.debug("Found shell commands %s", shell_cmds)
 
             if shell_cmds is not None:
@@ -128,10 +96,40 @@ If you wish to edit a file, add the file to the chat.
             message = self.coder.reflected_message
 
         self.commit()
+
+    @staticmethod
+    def _check_for_shell_cmds_in_response(aider_response: str) -> Optional[List[str]]:
+        """
+        Check if there are shell commands in the Aider agent
+        response.
+
+        :param aider_response: The response from the
+            Aider agent.
+        :return: The shell commands if found, otherwise None.
+        """
+        # List of shell code block markers
+        shell_markers = [
+            "bash", "sh", "shell", "cmd", "batch", "powershell", "ps1",
+            "zsh", "fish", "ksh", "csh", "tcsh"
+        ]
+
+        # Create a regex pattern to match any of the shell code block
+        # markers
+        shell_code_pattern = re.compile(
+            r'```(?:' + '|'.join(shell_markers) + r')(.*?)```',
+            re.DOTALL | re.IGNORECASE)
+
+        # Find all matches
+        matches = shell_code_pattern.findall(aider_response)
+
+        if not matches:
+            return None
+
+        return matches
     
     async def generate_commands(self, subtask: str) -> AsyncGenerator[str, None]:
         system_prompt = MainRepoAgentPrompts.SYSTEM_PROMPT_GENERATE_SHELL_CMD.format(shell = self.agent_manager.shell, os=self.agent_manager.os_name)
-        user_prompt = MainRepoAgentPrompts.SYSTEM_PROMPT_GENERATE_SHELL_CMD.format(subtask=subtask)
+        user_prompt = MainRepoAgentPrompts.USER_PROMPT_GENERATE_SHELL_CMD.format(subtask=subtask)
         response = utils.llm(self.model_name)(
             system_prompt=system_prompt,
             user_prompt=user_prompt
