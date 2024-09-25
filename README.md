@@ -30,6 +30,7 @@ The Raider Backend system is designed to manage multiple agents that can perform
     - `base_connection_manager.py`: Defines the BaseConnectionManager class.
     - `agent_manager_connection_manager.py`: Implements the AgentManagerConnectionManager.
     - `launch_connection_manager.py`: Implements the LaunchConnectionManager.
+    - `web_raider_connection_manager.py`: Implements the WebRaiderConnectionManager.
   - `handlers/`: Directory for handler classes.
     - `base_handler.py`: Defines the BaseHandler class.
     - `agent_manager_handler.py`: Implements the AgentManagerHandler.
@@ -95,7 +96,9 @@ This will set up the development environment inside a Docker container, ensuring
 
 ## API Endpoints
 
-The system provides a WebSocket endpoint for interacting with the agents:
+The system provides WebSocket endpoints for interacting with the agents:
+
+### 1. Agent Manager Endpoint
 
 - **WebSocket Endpoint**: `ws://<host>:<port>/ws/{session_id}`
 
@@ -139,7 +142,7 @@ The system provides a WebSocket endpoint for interacting with the agents:
 
   - `shutdown`: Shuts down the AgentManager.
 
-### Example
+#### Example
 
 To initialize an external repository agent, the data format would be:
 
@@ -156,3 +159,41 @@ To initialize an external repository agent, the data format would be:
 ```
 
 The `LaunchConnectionManager` will process this request, forward it to the appropriate `AgentManagerHandler`, and return the response through the WebSocket connection.
+
+### 2. Web Raider Endpoint
+
+- **WebSocket Endpoint**: `ws://<host>:<port>/web_raider/ws/{session_id}`
+
+  This endpoint is managed by the `WebRaiderConnectionManager`, which handles queries for the Web Raider functionality.
+
+  When sending messages to this endpoint, use the following JSON format:
+
+  ```json
+  {
+    "method": "query",
+    "params": {
+      "query": "<your_query>"
+    }
+  }
+  ```
+
+  Available methods:
+
+  - `query`: Sends a query to the Web Raider pipeline.
+    - **Params**: 
+      - `query` (str): The query to be processed by Web Raider.
+
+#### Example
+
+To send a query to Web Raider, the data format would be:
+
+```json
+{
+  "method": "query",
+  "params": {
+    "query": "Find a programming language agnostic AST parser"
+  }
+}
+```
+
+The `WebRaiderConnectionManager` will process this request, forward it to the Web Raider pipeline, and return the response through the WebSocket connection.
