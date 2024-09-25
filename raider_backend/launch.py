@@ -20,21 +20,8 @@ import uvicorn
 
 from raider_backend import utils
 from raider_backend.connection_managers.launch_connection_manager import LaunchConnectionManager
+from raider_backend.connection_managers.web_raider_connection_manager import WebRaiderConnectionManager
 from raider_backend.logger import LOG_CONFIG
-
-# Initialize the LaunchConnectionManager
-conn_manager = LaunchConnectionManager()
-
-# Set up logging
-logger = logging.getLogger("WebSocketEndpoint")
-
-# Initialize FastAPI application
-app = FastAPI()
-
-# Add WebSocket route to the application
-app.add_api_websocket_route(
-    "/ws/{session_id}",
-    conn_manager.websocket_endpoint)
 
 
 def main() -> None:
@@ -69,6 +56,9 @@ def main() -> None:
     # Configure logging
     LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(
         args.logfile)
+
+    # Set up logging
+    logger = logging.getLogger("WebSocketEndpoint")
     
     # Remove existing log file if it exists
     if Path(LOG_CONFIG['handlers']['fileHandler']['filename']).is_file():
@@ -76,6 +66,22 @@ def main() -> None:
     
     # Apply logging configuration
     dictConfig(LOG_CONFIG)
+
+    # Initialize the LaunchConnectionManager
+    conn_manager = LaunchConnectionManager()
+    web_raider_conn_manager = WebRaiderConnectionManager()
+
+    # Initialize FastAPI application
+    app = FastAPI()
+
+    # Add WebSocket route to the application
+    app.add_api_websocket_route(
+        "/ws/{session_id}",
+        conn_manager.websocket_endpoint)
+
+    app.add_api_websocket_route(
+        "/web_raider/ws/{session_id}",
+            web_raider_conn_manager.websocket_endpoint)
 
     # Run the FastAPI application using Uvicorn
     uvicorn.run(app, host="0.0.0.0", port=args.port)
