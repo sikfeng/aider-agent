@@ -21,7 +21,7 @@ class WebRaiderConnectionManager(BaseConnectionManager):
         :param session_id: The session identifier for the connection.
         :param data: The data received from the WebSocket connection.
             The expected format of the `data` parameter is a dictionary
-            with at least three keys: `main_repo_dir`, `method` and `params`.
+            with at least two keys: `method` and `params`.
         """
         method = data.get("method")
         params = data.get("params", {})
@@ -31,7 +31,11 @@ class WebRaiderConnectionManager(BaseConnectionManager):
         except ModuleNotFoundError as e:
             self.logger.error("Web Raider package not found")
             raise e
-        response = web_raider.pipeline_main(params["query"])
-        response = {"result": response}
-        await self.send_message(websocket, response, session_id)
+
+        if method == "query":
+            response = web_raider.pipeline_main(**params)
+            await self.send_message(websocket, {"result": response}, session_id)
+        else:
+            await self.send_message(websocket, {"error": f"Unknown method: {method}"}, session_id)
+
         await self.send_message(websocket, BaseConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)

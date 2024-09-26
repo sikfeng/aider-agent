@@ -46,7 +46,7 @@ async def test():
     uri = f"ws://localhost:{PORT}/web_raider/ws/tmp_session_id"
     query = "Find a programming language agnostic AST parser"
 
-    await test_websocket_endpoint(uri, "query", {"query": query})
+    await test_websocket_endpoint(uri, "query", {"user_query": query})
 
 
 def main():

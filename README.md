@@ -172,7 +172,7 @@ The `LaunchConnectionManager` will process this request, forward it to the appro
   {
     "method": "query",
     "params": {
-      "query": "<your_query>"
+      "user_query": "<your_query>"
     }
   }
   ```
@@ -181,7 +181,7 @@ The `LaunchConnectionManager` will process this request, forward it to the appro
 
   - `query`: Sends a query to the Web Raider pipeline.
     - **Params**: 
-      - `query` (str): The query to be processed by Web Raider.
+      - `user_query` (str): The query to be processed by Web Raider.
 
 #### Example
 
@@ -191,7 +191,7 @@ To send a query to Web Raider, the data format would be:
 {
   "method": "query",
   "params": {
-    "query": "Find a programming language agnostic AST parser"
+    "user_query": "Find a programming language agnostic AST parser"
   }
 }
 ```
