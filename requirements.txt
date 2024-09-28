@@ -8,3 +8,6 @@ aider-chat==0.57.1
 websockets
 boto3
 taskgen-ai
+llama-index-embeddings-ollama
+llama-index-vector-stores-chroma
+llama-index 
