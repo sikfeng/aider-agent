@@ -26,7 +26,7 @@ async def test_websocket_endpoint(uri, main_repo_dir, method, params=None):
             "params": params or {}
         }
         await websocket.send(json.dumps(request))
-        response_data = ""
+        response_data = []
         while True:
             response = await websocket.recv()
             partial_response_data = json.loads(response)
@@ -35,8 +35,11 @@ async def test_websocket_endpoint(uri, main_repo_dir, method, params=None):
             elif partial_response_data == BaseConnectionManager.END_OF_MESSAGE_RESPONSE:
                 return response_data
 
-            if "error" in partial_response_data:
-                response_data += partial_response_data["error"]
+            if "info" in partial_response_data:
+                logger.info(partial_response_data["info"])
+            elif "warning" in partial_response_data:
+                logger.warning(partial_response_data["warning"])
+            elif "error" in partial_response_data:
                 logger.error(partial_response_data["error"])
             elif "result" in partial_response_data:
                 response_data += partial_response_data["result"]
@@ -70,8 +73,7 @@ async def test():
     await test_websocket_endpoint(uri, main_repo_dir2, "get_external_repo_agents")
 
     logger.info("Generating subtasks for task: %s", task)
-    subtasks_response = await test_websocket_endpoint(uri, main_repo_dir, "generate_subtasks", {"objective": task})
-    subtasks = json.loads(subtasks_response)
+    subtasks = await test_websocket_endpoint(uri, main_repo_dir, "generate_subtasks", {"objective": task})
 
     for subtask in subtasks:
         logger.info("Running subtask: %s", subtask)

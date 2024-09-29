@@ -30,11 +30,11 @@ class AgentManagerConnectionManager(BaseConnectionManager):
 
         if method == "init_external_repo_agent":
             result = agent_manager.init_external_repo_agent(**params)
-            response = {"result": "Success" if result else "Failure"}
+            response = {"result": ["Success" if result else "Failure"]}
             await self.send_message(websocket, response, session_id)
 
         elif method == "get_external_repo_agents":
-            agents = json.dumps(agent_manager.get_external_repo_agents())
+            agents = agent_manager.get_external_repo_agents()
             response = {"result": agents}
             await self.send_message(websocket, response, session_id)
 
@@ -52,12 +52,12 @@ class AgentManagerConnectionManager(BaseConnectionManager):
                 await self.send_message(websocket, {"result": response}, session_id)
 
         elif method == "undo":
-            agent_manager.undo()
-            await self.send_message(websocket, {"result": "Undo completed"}, session_id)
+            response = agent_manager.undo()
+            await self.send_message(websocket, {"result": response}, session_id)
 
         elif method == "shutdown":
-            result = agent_manager.shutdown()
-            await self.send_message(websocket, {"result": result}, session_id)
+            response = agent_manager.shutdown()
+            await self.send_message(websocket, {"result": response}, session_id)
             self.agent_managers.pop(session_id)
 
         else:

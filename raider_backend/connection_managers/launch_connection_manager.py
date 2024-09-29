@@ -30,5 +30,6 @@ class LaunchConnectionManager(BaseConnectionManager):
         response = await self.agent_manager_handler.handle_message(
             session_id=session_id, main_repo_dir=main_repo_dir, method=method, params=params)
         response = {"result": response}
+        # TODO: should yield from handle_message
         await self.send_message(websocket, response, session_id)
         await self.send_message(websocket, BaseConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)

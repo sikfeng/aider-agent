@@ -40,7 +40,7 @@ class AgentManagerHandler(BaseHandler):
                 "params": params or {}
             }
             await websocket.send(json.dumps(request))
-            response_data = ""
+            response_data = []
             while True:
                 response = await websocket.recv()
                 partial_response_data = json.loads(response)
@@ -49,8 +49,11 @@ class AgentManagerHandler(BaseHandler):
                 elif partial_response_data == BaseConnectionManager.END_OF_MESSAGE_RESPONSE:
                     return response_data
 
-                if "error" in partial_response_data:
-                    response_data += partial_response_data["error"]
+                if "info" in partial_response_data:
+                    self.logger.info(partial_response_data["info"])
+                elif "warning" in partial_response_data:
+                    self.logger.warning(partial_response_data["warning"])
+                elif "error" in partial_response_data:
                     self.logger.error(partial_response_data["error"])
                 elif "result" in partial_response_data:
                     response_data += partial_response_data["result"]
