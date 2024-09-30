@@ -40,21 +40,23 @@ class AgentManagerHandler(BaseHandler):
                 "params": params or {}
             }
             await websocket.send(json.dumps(request))
-            response_data = []
             while True:
                 response = await websocket.recv()
                 partial_response_data = json.loads(response)
                 if partial_response_data == BaseConnectionManager.KEEP_ALIVE_PING:
                     continue  # Ignore keepalive pings
                 elif partial_response_data == BaseConnectionManager.END_OF_MESSAGE_RESPONSE:
-                    return response_data
+                    break
 
                 if "info" in partial_response_data:
                     self.logger.info(partial_response_data["info"])
+                    yield partial_response_data
                 elif "warning" in partial_response_data:
                     self.logger.warning(partial_response_data["warning"])
+                    yield partial_response_data
                 elif "error" in partial_response_data:
                     self.logger.error(partial_response_data["error"])
+                    yield partial_response_data
                 elif "result" in partial_response_data:
-                    response_data += partial_response_data["result"]
                     self.logger.info(partial_response_data["result"])
+                    yield partial_response_data
