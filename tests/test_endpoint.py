@@ -51,9 +51,12 @@ async def test():
     main_repo_dir = "/workspace/tmp_repo/"
     main_repo_dir2 = "/workspace/tmp_repo2/"
 
-    external_repos = ["../continue"]
+    external_repos = ["../cody", "../auto-code-rover"]
     external_repos2 = ["../react", "../sheetjs"]
     task = "Make a basic hello world vscode extension"
+
+    logger.info("Initializing agent manager on %s", main_repo_dir)
+    await test_websocket_endpoint(uri, main_repo_dir, "init_agent_manager", {"timeout": 10})
 
     for repo_dir in external_repos:
         logger.info("Initializing external repo agent %s on main repo %s", repo_dir, main_repo_dir)
@@ -77,7 +80,12 @@ async def test():
 
     for subtask in subtasks:
         logger.info("Running subtask: %s", subtask)
-        await test_websocket_endpoint(uri, main_repo_dir, "run_subtask", {"subtask": subtask})
+        if subtask["task_type"] == "User action":
+            logger.info("Current task relies on user action, skipping")
+        elif subtask["task_type"] == "Command execution":
+            await test_websocket_endpoint(uri, main_repo_dir, "generate_commands", {"subtask": subtask["task_body"]})
+        elif subtask["task_type"] == "Coding":
+            await test_websocket_endpoint(uri, main_repo_dir, "run_subtask", {"subtask": subtask["task_body"]})
 
     await test_websocket_endpoint(uri, main_repo_dir, "undo")
 
