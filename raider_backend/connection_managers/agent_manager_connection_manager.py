@@ -44,7 +44,7 @@ class AgentManagerConnectionManager(BaseConnectionManager):
                 await self.send_message(websocket, response, session_id)
 
         elif method == "run_subtask":
-            async for response in agent_manager.run_subtask(**params):
+            async for response in agent_manager.run_subtask(session_id=session_id, **params):
                 await self.send_message(websocket, response, session_id)
         
         elif method == "generate_commands":

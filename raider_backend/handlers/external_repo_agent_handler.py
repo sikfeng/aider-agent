@@ -82,24 +82,22 @@ class ExternalRepoAgentHandler(BaseHandler):
                     self.logger.info(partial_response_data["result"])
                     yield partial_response_data
 
-    async def run(self, agent_id: str, msg: str) -> str:
-        return await self.handle_message(agent_id, "session", "run", {"msg": msg})
+    async def run(self, agent_id: str, msg: str):
+        raise RuntimeError("ExternalRepoAgent should NOT run any tasks!")
 
-    async def run_stream(self, agent_id: str, msg: str) -> AsyncGenerator[str, None]:
-        response = await self.handle_message(agent_id, "session", "run_stream", {"msg": msg})
-        for chunk in response.split():  # This is a simplification; you might need to adjust based on actual response format
-            yield chunk
+    async def run_stream(self, agent_id: str, msg: str):
+        raise RuntimeError("ExternalRepoAgent should NOT run any tasks!")
 
     async def ask(self, agent_id: str, msg: str) -> AsyncGenerator[str, None]:
         async for partial_response in self.handle_message(agent_id, "session", "ask", {"msg": msg}):
             yield partial_response
 
-    async def get_repo_map(self, agent_id: str) -> AsyncGenerator[str, None]:
-        async for partial_response in self.handle_message(agent_id, "session", "get_repo_map", {}):
+    async def get_repo_map(self, agent_id: str, session_id: str) -> AsyncGenerator[str, None]:
+        async for partial_response in self.handle_message(agent_id, session_id, "get_repo_map", {}):
             yield partial_response
 
     # TODO: needs cleaning up
-    async def find_relevant_code(self, agent_id: str, task: str):
+    async def find_relevant_code(self, agent_id: str, task: str, session_id: str):
         repo_dir = self.agents[agent_id]['repo_dir']
         model_name = self.agents[agent_id]['model_name']
         code_snippet_filename = utils.get_absolute_path(
@@ -111,7 +109,7 @@ class ExternalRepoAgentHandler(BaseHandler):
         Path(code_snippet_filename).unlink(missing_ok=True)
 
         # Step 1: Get list of relevant files
-        async for response in self.get_repo_map(agent_id):
+        async for response in self.get_repo_map(agent_id, session_id):
             # repomap should be a single response
             repo_map = response
 

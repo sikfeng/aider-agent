@@ -139,7 +139,7 @@ class AgentManager:
             self.logger.error("MainRepoAgent failed to initialize: %s", str(e))
             return False
 
-    def init_planner_agent(self, model_name: str = "bedrock/meta.llama3-1-405b-instruct-v1:0") -> bool:
+    def init_planner_agent(self, model_name: str = "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0") -> bool:
         """
         Initialize the Planner agent.
 
@@ -175,14 +175,14 @@ class AgentManager:
         """
         raise NotImplementedError
 
-    async def run_subtask(self, subtask: str) -> AsyncGenerator[str, None]:
+    async def run_subtask(self, subtask: str, session_id: str) -> AsyncGenerator[str, None]:
         """
         Run a subtask using the main Aider agent.
 
         :param subtask: The subtask to run.
         :return: An async generator yielding parts of the response.
         """
-        async for response in self.main_repo_agent.run_subtask(subtask):
+        async for response in self.main_repo_agent.run_subtask(subtask=subtask, session_id=session_id):
             yield response
 
     async def generate_commands(self, subtask: str) -> AsyncGenerator[str, None]:

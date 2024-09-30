@@ -34,7 +34,7 @@ class MainRepoAgent(BaseRepoAgent):
         repo_map = self._get_repo_map()
         return repo_map
 
-    async def run_subtask(self, subtask: str) -> AsyncGenerator[str, None]:
+    async def run_subtask(self, session_id: str, subtask: str) -> AsyncGenerator[str, None]:
         """
         Run a subtask using the main Aider agent.
 
@@ -43,9 +43,15 @@ class MainRepoAgent(BaseRepoAgent):
         """
         self.logger.info("Starting to run %s.", subtask)
         self.logger.info("Querying ExternalRepoAgentHandlers.")
+        """
         await asyncio.gather(*(self.agent_manager.external_repo_agent_handler.find_relevant_code(agent_id=repo_dir, task=subtask)
                                for repo_dir
                                in self.agent_manager.external_repo_agent_handler.agents.keys()))
+        """
+        for repo_dir in self.agent_manager.external_repo_agent_handler.agents.keys():
+            await self.agent_manager.external_repo_agent_handler.find_relevant_code(agent_id=repo_dir, task=subtask, session_id=session_id)
+            self.logger.info("Finished searching %s", repo_dir)
+            yield {"info": f"Finished searching {repo_dir}"}
 
         for agent_id in self.agent_manager.external_repo_agent_handler.agents.keys():
             code_snippet_filename = f"code_snippets_{agent_id.replace('/', '').replace('.', '')}.txt"
@@ -76,7 +82,7 @@ If you wish to edit a file, add the file to the chat.
         for _ in range(self.max_reflections):
             curr_response = ""
             self.logger.debug("Message: %s", message)
-            async for partial_response in self.run_stream(message):
+            for partial_response in self.run_stream(message):
                 curr_response += partial_response
                 yield {"result": partial_response}
 
