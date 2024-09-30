@@ -58,7 +58,7 @@ class BaseHandler(ABC):
 
     def kill_agent(self, agent_id: str):
         if agent_id in self.agents:
-            process = self.agents[agent_id].get('process')
+            process: subprocess.Popen = self.agents[agent_id].get('process')
             if process and process.poll() is None:
                 self.logger.info(f"Killing process for agent {agent_id}")
                 process.kill()

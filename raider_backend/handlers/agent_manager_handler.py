@@ -14,9 +14,10 @@ class AgentManagerHandler(BaseHandler):
         super().__init__()
 
     def initialize_agent(self, repo_dir: str):
+        # Initializes AgentManager with MainRepoAgent at repo_dir
         repo_dir = utils.get_absolute_path(repo_dir)
         command = f"init_agent_manager --main-repo-dir {repo_dir} --port {{port}}"
-        process, port = self._init_process(repo_dir, command)
+        process, port = self._init_process(repo_dir, command, directory=repo_dir)
         if process and port:
             self.agents[repo_dir] = {
                 'process': process,

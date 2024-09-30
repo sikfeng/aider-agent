@@ -100,7 +100,7 @@ class AgentManager:
                 "skipping.")
             return False
         
-        agent_id = f"external_repo_{repo_dir}"
+        agent_id = repo_dir
         if agent_id in self.external_repo_agent_handler.agents:
             self.logger.warning(
                 "Attempt to initialize a new ExternalRepoAgent on already "
@@ -183,7 +183,7 @@ class AgentManager:
         :return: An async generator yielding parts of the response.
         """
         async for response in self.main_repo_agent.run_subtask(subtask):
-            yield [response]
+            yield response
 
     async def generate_commands(self, subtask: str) -> AsyncGenerator[str, None]:
         """
@@ -200,7 +200,7 @@ class AgentManager:
         Undo the last commit made by Aider.
         """
         self.main_repo_agent.undo()
-        return ["Undo command sent"]
+        return {"result": "Undo command sent"}
 
     def get_external_repo_agents(self) -> List[str]:
         """
@@ -219,7 +219,7 @@ class AgentManager:
         :return: "shutdown" after shutting down all agents.
         """
         self.external_repo_agent_handler.kill_all_agents()
-        return ["shutdown"]
+        return {"result": "shutdown"}
 
 def main():
     # Initialize the connection manager for AgentManager
