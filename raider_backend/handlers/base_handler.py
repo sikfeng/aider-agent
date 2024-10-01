@@ -24,7 +24,7 @@ class BaseHandler(ABC):
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
-                response = httpx.get(f"http://0.0.0.0:{port}/ping")
+                response = httpx.get(f"http://localhost:{port}/ping")
                 if response.json() == "pong":
                     self.logger.info(f"Ping successful on port {port}.")
                     return True

@@ -84,7 +84,7 @@ def main() -> None:
         web_raider_conn_manager.websocket_endpoint)
 
     # Run the FastAPI application using Uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
+    uvicorn.run(app, host="localhost", port=args.port)
 
 
 # Run the application with Uvicorn when the script is executed directly
