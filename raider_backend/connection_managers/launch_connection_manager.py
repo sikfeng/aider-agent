@@ -29,5 +29,7 @@ class LaunchConnectionManager(BaseConnectionManager):
 
         async for response in self.agent_manager_handler.handle_message(
             session_id=session_id, query_id=query_id, main_repo_dir=main_repo_dir, method=method, params=params):
+            if query_id not in response:
+                response["query_id"] = query_id
             await self.send_message(websocket, response, session_id, query_id)
         await self.send_message(websocket, BaseConnectionManager.END_OF_MESSAGE_RESPONSE, session_id, query_id)
