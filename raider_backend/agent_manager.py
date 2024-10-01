@@ -100,7 +100,7 @@ class AgentManager:
                 "skipping.")
             return False
         
-        agent_id = f"external_repo_{repo_dir}"
+        agent_id = repo_dir
         if agent_id in self.external_repo_agent_handler.agents:
             self.logger.warning(
                 "Attempt to initialize a new ExternalRepoAgent on already "

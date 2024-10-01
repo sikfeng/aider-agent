@@ -34,6 +34,12 @@ def get_absolute_path(path: str) -> str:
     return str(path_obj)
 
 
+def get_last_modified_time(file_path: str):
+    path = Path(file_path).resolve()
+    last_modified = path.stat().st_mtime
+    return last_modified
+
+
 def llm(model_name: str) -> partial:
     """
     Create a partial function for synchronous LLM completion.
