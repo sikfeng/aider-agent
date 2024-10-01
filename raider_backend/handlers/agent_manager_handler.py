@@ -33,7 +33,11 @@ class AgentManagerHandler(BaseHandler):
 
         if method == "init_agent_manager":
             timeout = params.get("timeout", 10)
-            self.initialize_agent(main_repo_dir, timeout)
+            try:
+                self.initialize_agent(main_repo_dir, timeout)
+                yield {"info": f"AgentManager on {main_repo_dir} initialized"}
+            except InitAgentManagerError:
+                yield {"error": f"Failed to initialize AgentManager on {main_repo_dir}"}
             return
 
         if main_repo_dir not in self.agents:
