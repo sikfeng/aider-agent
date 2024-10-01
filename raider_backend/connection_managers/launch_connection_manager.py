@@ -27,8 +27,7 @@ class LaunchConnectionManager(BaseConnectionManager):
         method = data.get("method")
         params = data.get("params", {})
 
-        response = await self.agent_manager_handler.handle_message(
-            session_id=session_id, main_repo_dir=main_repo_dir, method=method, params=params)
-        response = {"result": response}
-        await self.send_message(websocket, response, session_id)
+        async for response in self.agent_manager_handler.handle_message(
+            session_id=session_id, main_repo_dir=main_repo_dir, method=method, params=params):
+            await self.send_message(websocket, response, session_id)
         await self.send_message(websocket, BaseConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)

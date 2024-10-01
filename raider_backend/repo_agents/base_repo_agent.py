@@ -43,7 +43,7 @@ class BaseRepoAgent:
             io=self.io,
             map_tokens=map_tokens,
             suggest_shell_commands=False,
-            chat_language="English",
+            chat_language="en-us",
         )
 
     def run(self, msg: str) -> str:
@@ -64,7 +64,7 @@ class BaseRepoAgent:
         except Exception as e:
             return f"error: failed due to {e}"
 
-    async def run_stream(self, msg: str) -> AsyncGenerator[str, None]:
+    def run_stream(self, msg: str):
         """Run the agent with the given message and stream the response.
 
         :param msg: The message to process.

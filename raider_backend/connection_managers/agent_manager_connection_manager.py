@@ -34,7 +34,7 @@ class AgentManagerConnectionManager(BaseConnectionManager):
             await self.send_message(websocket, response, session_id)
 
         elif method == "get_external_repo_agents":
-            agents = json.dumps(agent_manager.get_external_repo_agents())
+            agents = agent_manager.get_external_repo_agents()
             response = {"result": agents}
             await self.send_message(websocket, response, session_id)
 
@@ -44,20 +44,20 @@ class AgentManagerConnectionManager(BaseConnectionManager):
                 await self.send_message(websocket, response, session_id)
 
         elif method == "run_subtask":
-            async for response in agent_manager.run_subtask(**params):
-                await self.send_message(websocket, {"result": response}, session_id)
+            async for response in agent_manager.run_subtask(session_id=session_id, **params):
+                await self.send_message(websocket, response, session_id)
         
         elif method == "generate_commands":
             async for response in agent_manager.generate_commands(**params):
-                await self.send_message(websocket, {"result": response}, session_id)
+                await self.send_message(websocket, response, session_id)
 
         elif method == "undo":
-            agent_manager.undo()
-            await self.send_message(websocket, {"result": "Undo completed"}, session_id)
+            response = agent_manager.undo()
+            await self.send_message(websocket, response, session_id)
 
         elif method == "shutdown":
-            result = agent_manager.shutdown()
-            await self.send_message(websocket, {"result": result}, session_id)
+            response = agent_manager.shutdown()
+            await self.send_message(websocket, response, session_id)
             self.agent_managers.pop(session_id)
 
         else:

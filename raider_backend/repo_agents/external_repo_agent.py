@@ -69,7 +69,7 @@ def main() -> None:
     app.add_api_route("/ping", conn_manager.ping)
 
     # Run the server
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
+    uvicorn.run(app, host="localhost", port=args.port)
 
 if __name__ == "__main__":
     main()

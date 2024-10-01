@@ -139,7 +139,7 @@ class AgentManager:
             self.logger.error("MainRepoAgent failed to initialize: %s", str(e))
             return False
 
-    def init_planner_agent(self, model_name: str = "bedrock/meta.llama3-1-405b-instruct-v1:0") -> bool:
+    def init_planner_agent(self, model_name: str = "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0") -> bool:
         """
         Initialize the Planner agent.
 
@@ -175,14 +175,14 @@ class AgentManager:
         """
         raise NotImplementedError
 
-    async def run_subtask(self, subtask: str) -> AsyncGenerator[str, None]:
+    async def run_subtask(self, subtask: str, session_id: str) -> AsyncGenerator[str, None]:
         """
         Run a subtask using the main Aider agent.
 
         :param subtask: The subtask to run.
         :return: An async generator yielding parts of the response.
         """
-        async for response in self.main_repo_agent.run_subtask(subtask):
+        async for response in self.main_repo_agent.run_subtask(subtask=subtask, session_id=session_id):
             yield response
 
     async def generate_commands(self, subtask: str) -> AsyncGenerator[str, None]:
@@ -200,6 +200,7 @@ class AgentManager:
         Undo the last commit made by Aider.
         """
         self.main_repo_agent.undo()
+        return {"result": "Undo command sent"}
 
     def get_external_repo_agents(self) -> List[str]:
         """
@@ -218,7 +219,7 @@ class AgentManager:
         :return: "shutdown" after shutting down all agents.
         """
         self.external_repo_agent_handler.kill_all_agents()
-        return "shutdown"
+        return {"result": "shutdown"}
 
 def main():
     # Initialize the connection manager for AgentManager
@@ -250,7 +251,7 @@ def main():
     os.chdir(args.main_repo_dir)
 
     # Run the FastAPI server
-    uvicorn.run(app, host="0.0.0.0", port=args.port)
+    uvicorn.run(app, host="localhost", port=args.port)
 
 
 if __name__ == "__main__":
