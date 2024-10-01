@@ -76,11 +76,11 @@ def main() -> None:
 
     # Add WebSocket route to the application
     app.add_api_websocket_route(
-        "/ws/{session_id}",
+        "/ws/{session_id}/{query_id}",
         conn_manager.websocket_endpoint)
 
     app.add_api_websocket_route(
-        "/web_raider/ws/{session_id}",
+        "/web_raider/ws/{session_id}/{query_id}",
         web_raider_conn_manager.websocket_endpoint)
 
     # Run the FastAPI application using Uvicorn

@@ -65,7 +65,7 @@ def main() -> None:
 
     # Set up FastAPI with WebSocket support
     app = FastAPI()
-    app.add_api_websocket_route("/ws/{session_id}", conn_manager.websocket_endpoint)
+    app.add_api_websocket_route("/ws/{session_id}/{query_id}", conn_manager.websocket_endpoint)
     app.add_api_route("/ping", conn_manager.ping)
 
     # Run the server

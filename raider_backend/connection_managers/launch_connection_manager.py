@@ -11,7 +11,7 @@ class LaunchConnectionManager(BaseConnectionManager):
         self.agent_manager_handler: AgentManagerHandler = AgentManagerHandler()
 
     async def _on_receive(self, websocket: WebSocket,
-                          session_id: str, data: Dict[str, Any]) -> None:
+                          session_id: str, query_id: str, data: Dict[str, Any]) -> None:
         """
         Processes incoming messages and performs the corresponding
         actions based on the method specified in the message.
@@ -28,6 +28,6 @@ class LaunchConnectionManager(BaseConnectionManager):
         params = data.get("params", {})
 
         async for response in self.agent_manager_handler.handle_message(
-            session_id=session_id, main_repo_dir=main_repo_dir, method=method, params=params):
-            await self.send_message(websocket, response, session_id)
-        await self.send_message(websocket, BaseConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
+            session_id=session_id, query_id=query_id, main_repo_dir=main_repo_dir, method=method, params=params):
+            await self.send_message(websocket, response, session_id, query_id)
+        await self.send_message(websocket, BaseConnectionManager.END_OF_MESSAGE_RESPONSE, session_id, query_id)

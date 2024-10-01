@@ -11,7 +11,7 @@ class WebRaiderConnectionManager(BaseConnectionManager):
         super().__init__()
 
     async def _on_receive(self, websocket: WebSocket,
-                          session_id: str, data: Dict[str, Any]) -> None:
+                          session_id: str, query_id: str, data: Dict[str, Any]) -> None:
         """
         Processes incoming messages and performs the corresponding
         actions based on the method specified in the message.
@@ -34,8 +34,8 @@ class WebRaiderConnectionManager(BaseConnectionManager):
 
         if method == "query":
             response = web_raider.pipeline_main(**params)
-            await self.send_message(websocket, {"result": response}, session_id)
+            await self.send_message(websocket, {"result": response}, session_id, query_id)
         else:
-            await self.send_message(websocket, {"error": f"Unknown method: {method}"}, session_id)
+            await self.send_message(websocket, {"error": f"Unknown method: {method}"}, session_id, query_id)
 
-        await self.send_message(websocket, BaseConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
+        await self.send_message(websocket, BaseConnectionManager.END_OF_MESSAGE_RESPONSE, session_id, query_id)

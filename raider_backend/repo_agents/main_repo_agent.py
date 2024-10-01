@@ -34,7 +34,7 @@ class MainRepoAgent(BaseRepoAgent):
         repo_map = self._get_repo_map()
         return repo_map
 
-    async def run_subtask(self, session_id: str, subtask: str) -> AsyncGenerator[str, None]:
+    async def run_subtask(self, session_id: str, query_id: str, subtask: str) -> AsyncGenerator[str, None]:
         """
         Run a subtask using the main Aider agent.
 
@@ -49,7 +49,7 @@ class MainRepoAgent(BaseRepoAgent):
                                in self.agent_manager.external_repo_agent_handler.agents.keys()))
         """
         for repo_dir in self.agent_manager.external_repo_agent_handler.agents.keys():
-            await self.agent_manager.external_repo_agent_handler.find_relevant_code(agent_id=repo_dir, task=subtask, session_id=session_id)
+            await self.agent_manager.external_repo_agent_handler.find_relevant_code(agent_id=repo_dir, task=subtask, session_id=session_id, query_id=query_id)
             self.logger.info("Finished searching %s", repo_dir)
             yield {"info": f"Finished searching {repo_dir}"}
 

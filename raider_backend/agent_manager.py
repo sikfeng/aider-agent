@@ -175,14 +175,14 @@ class AgentManager:
         """
         raise NotImplementedError
 
-    async def run_subtask(self, subtask: str, session_id: str) -> AsyncGenerator[str, None]:
+    async def run_subtask(self, subtask: str, session_id: str, query_id: str) -> AsyncGenerator[str, None]:
         """
         Run a subtask using the main Aider agent.
 
         :param subtask: The subtask to run.
         :return: An async generator yielding parts of the response.
         """
-        async for response in self.main_repo_agent.run_subtask(subtask=subtask, session_id=session_id):
+        async for response in self.main_repo_agent.run_subtask(subtask=subtask, session_id=session_id, query_id=query_id):
             yield response
 
     async def generate_commands(self, subtask: str) -> AsyncGenerator[str, None]:
@@ -229,7 +229,7 @@ def main():
     # Set up FastAPI application
     app = FastAPI()
     app.add_api_websocket_route(
-        "/ws/{session_id}", conn_manager.websocket_endpoint)
+        "/ws/{session_id}/{query_id}", conn_manager.websocket_endpoint)
     app.add_api_route("/ping", conn_manager.ping)
 
     # Parse command-line arguments

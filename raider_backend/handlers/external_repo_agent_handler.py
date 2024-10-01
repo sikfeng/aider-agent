@@ -48,14 +48,14 @@ class ExternalRepoAgentHandler(BaseHandler):
         else:
             raise InitExternalRepoAgentError(f"Failed to initialize ExternalRepoAgent for {agent_id} on {repo_dir}.")
 
-    async def handle_message(self, agent_id: str, session_id: str, method: str, params: dict):
+    async def handle_message(self, agent_id: str, session_id: str, query_id: str, method: str, params: dict):
         if agent_id not in self.agents:
             self.logger.warning("Agent %s not yet initialized", agent_id)
             yield {"warning": "Agent not initialized yey"}
             return
 
         port = self.agents[agent_id]['port']
-        async with websockets.connect(f"ws://localhost:{port}/ws/{session_id}", ping_interval=None) as websocket:
+        async with websockets.connect(f"ws://localhost:{port}/ws/{session_id}/{query_id}", ping_interval=None) as websocket:
             request = {
                 "method": method,
                 "params": params or {}
@@ -88,16 +88,16 @@ class ExternalRepoAgentHandler(BaseHandler):
     async def run_stream(self, agent_id: str, msg: str):
         raise RuntimeError("ExternalRepoAgent should NOT run any tasks!")
 
-    async def ask(self, agent_id: str, msg: str) -> AsyncGenerator[str, None]:
-        async for partial_response in self.handle_message(agent_id, "session", "ask", {"msg": msg}):
+    async def ask(self, agent_id: str, session_id: str, msg: str) -> AsyncGenerator[str, None]:
+        async for partial_response in self.handle_message(agent_id, session_id, "ask", {"msg": msg}):
             yield partial_response
 
-    async def get_repo_map(self, agent_id: str, session_id: str) -> AsyncGenerator[str, None]:
-        async for partial_response in self.handle_message(agent_id, session_id, "get_repo_map", {}):
+    async def get_repo_map(self, agent_id: str, session_id: str, query_id: str) -> AsyncGenerator[str, None]:
+        async for partial_response in self.handle_message(agent_id, session_id, query_id, "get_repo_map", {}):
             yield partial_response
 
     # TODO: needs cleaning up
-    async def find_relevant_code(self, agent_id: str, task: str, session_id: str):
+    async def find_relevant_code(self, agent_id: str, task: str, session_id: str, query_id: str):
         repo_dir = self.agents[agent_id]['repo_dir']
         model_name = self.agents[agent_id]['model_name']
         code_snippet_filename = utils.get_absolute_path(
@@ -109,7 +109,7 @@ class ExternalRepoAgentHandler(BaseHandler):
         Path(code_snippet_filename).unlink(missing_ok=True)
 
         # Step 1: Get list of relevant files
-        async for response in self.get_repo_map(agent_id, session_id):
+        async for response in self.get_repo_map(agent_id, session_id, query_id):
             # repomap should be a single response
             repo_map = response
 

@@ -45,11 +45,11 @@ class BaseConnectionManager(ABC):
 
     @abstractmethod
     async def _on_receive(self, websocket: WebSocket,
-                          session_id: str, data: Dict[str, Any]) -> None:
+                          session_id: str, query_id:str, data: Dict[str, Any]) -> None:
         pass
 
     async def send_message(self, websocket: WebSocket,
-                           message: Dict[str, Any], session_id: str) -> None:
+                           message: Dict[str, Any], session_id: str, query_id: str) -> None:
         """
         Appends the message to the buffer for the given session.
 
@@ -60,7 +60,7 @@ class BaseConnectionManager(ABC):
         if session_id not in self.message_buffer:
             self.message_buffer[session_id] = []
         self.message_buffer[session_id].append(message)
-        self.logger.info("Message added to buffer for session %s", session_id)
+        self.logger.debug("Message added to buffer for session %s", session_id)
 
         if len(self.message_buffer[session_id]) > 10:
             self.logger.debug("More than 10 message in buffer for session %s", session_id)
@@ -77,7 +77,7 @@ class BaseConnectionManager(ABC):
             messages to.
         """
         while True:
-            self.logger.info("Checking for buffered messages for session %s", session_id)
+            self.logger.debug("Checking for buffered messages for session %s", session_id)
             if session_id in self.message_buffer and self.message_buffer[session_id]:
                 message = self.message_buffer[session_id][0]
                 try:
@@ -109,7 +109,7 @@ class BaseConnectionManager(ABC):
     async def websocket_endpoint(
             self,
             websocket: WebSocket,
-            session_id: str) -> None:
+            session_id: str, query_id: str) -> None:
         """
         WebSocket endpoint to handle various agent management tasks.
 
@@ -132,7 +132,7 @@ class BaseConnectionManager(ABC):
             while True:
                 data = await websocket.receive_json()
                 self.logger.info("Received data: %s", data)
-                await self._on_receive(websocket, session_id, data)
+                await self._on_receive(websocket, session_id, query_id, data)
 
         except WebSocketDisconnect:
             await self._on_disconnect(websocket)

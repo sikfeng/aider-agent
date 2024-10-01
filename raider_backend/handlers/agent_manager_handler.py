@@ -28,7 +28,7 @@ class AgentManagerHandler(BaseHandler):
         else:
             raise InitAgentManagerError(f"Failed to initialize AgentManager on {repo_dir}.")
 
-    async def handle_message(self, main_repo_dir: str, session_id: str, method: str, params: dict): 
+    async def handle_message(self, main_repo_dir: str, session_id: str, query_id: str, method: str, params: dict):
         main_repo_dir = utils.get_absolute_path(main_repo_dir)
 
         if method == "init_agent_manager":
@@ -42,7 +42,7 @@ class AgentManagerHandler(BaseHandler):
             return
 
         port = self.agents[main_repo_dir]['port']
-        async with websockets.connect(f"ws://localhost:{port}/ws/{session_id}", ping_interval=None) as websocket:
+        async with websockets.connect(f"ws://localhost:{port}/ws/{session_id}/{query_id}", ping_interval=None) as websocket:
             request = {
                 "method": method,
                 "params": params or {}

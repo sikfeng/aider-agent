@@ -20,7 +20,7 @@ class RepoAgentConnectionManager(BaseConnectionManager):
             self.logger.info(
                 "Initialized ExternalRepoAgent with session ID %s", session_id)
 
-    async def _on_receive(self, websocket: WebSocket, session_id: str, data: Dict[str, Any]) -> None:
+    async def _on_receive(self, websocket: WebSocket, session_id: str, query_id: str, data: Dict[str, Any]) -> None:
         method = data.get("method")
         params = data.get("params", {})
 
@@ -29,21 +29,21 @@ class RepoAgentConnectionManager(BaseConnectionManager):
         if method == "run":
             result = repo_agent.run(**params)
             response = {"result": result}
-            await self.send_message(websocket, response, session_id)
+            await self.send_message(websocket, response, session_id, query_id)
         elif method == "run_stream":
             async for partial_response in repo_agent.run_stream(**params):
-                await self.send_message(websocket, partial_response, session_id)
+                await self.send_message(websocket, partial_response, session_id, query_id)
         elif method == "ask":
             async for partial_response in repo_agent.ask(**params):
-                await self.send_message(websocket, {"result": partial_response}, session_id)
+                await self.send_message(websocket, {"result": partial_response}, session_id, query_id)
         elif method == "get_repo_map":
             result = repo_agent.get_repo_map()
             response = {"result": result}
-            await self.send_message(websocket, response, session_id)
+            await self.send_message(websocket, response, session_id, query_id)
         elif method == "ping":
             response = {"result": "pong"}
-            await self.send_message(websocket, response, session_id)
+            await self.send_message(websocket, response, session_id, query_id)
         else:
-            await self.send_message(websocket, {"error": f"Unknown method: {method}"}, session_id)
+            await self.send_message(websocket, {"error": f"Unknown method: {method}"}, session_id, query_id)
 
-        await self.send_message(websocket, self.END_OF_MESSAGE_RESPONSE, session_id)
+        await self.send_message(websocket, self.END_OF_MESSAGE_RESPONSE, session_id, query_id)

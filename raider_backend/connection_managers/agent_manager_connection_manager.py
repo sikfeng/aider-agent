@@ -18,7 +18,7 @@ class AgentManagerConnectionManager(BaseConnectionManager):
             self.logger.info(
                 "Initialized AgentManager with session ID %s", session_id)
 
-    async def _on_receive(self, websocket: WebSocket, session_id: str, data: Dict[str, Any]) -> None:
+    async def _on_receive(self, websocket: WebSocket, session_id: str, query_id: str, data: Dict[str, Any]) -> None:
         method = data.get("method")
         params = data.get("params", {})
 
@@ -31,37 +31,37 @@ class AgentManagerConnectionManager(BaseConnectionManager):
         if method == "init_external_repo_agent":
             result = agent_manager.init_external_repo_agent(**params)
             response = {"result": "Success" if result else "Failure"}
-            await self.send_message(websocket, response, session_id)
+            await self.send_message(websocket, response, session_id, query_id)
 
         elif method == "get_external_repo_agents":
             agents = agent_manager.get_external_repo_agents()
             response = {"result": agents}
-            await self.send_message(websocket, response, session_id)
+            await self.send_message(websocket, response, session_id, query_id)
 
         elif method == "generate_subtasks":
             async for response in agent_manager.generate_subtasks(**params):
                 self.logger.info("Response: %s", response)
-                await self.send_message(websocket, response, session_id)
+                await self.send_message(websocket, response, session_id, query_id)
 
         elif method == "run_subtask":
-            async for response in agent_manager.run_subtask(session_id=session_id, **params):
-                await self.send_message(websocket, response, session_id)
+            async for response in agent_manager.run_subtask(session_id=session_id, query_id=query_id, **params):
+                await self.send_message(websocket, response, session_id, query_id)
         
         elif method == "generate_commands":
             async for response in agent_manager.generate_commands(**params):
-                await self.send_message(websocket, response, session_id)
+                await self.send_message(websocket, response, session_id, query_id)
 
         elif method == "undo":
             response = agent_manager.undo()
-            await self.send_message(websocket, response, session_id)
+            await self.send_message(websocket, response, session_id, query_id)
 
         elif method == "shutdown":
             response = agent_manager.shutdown()
-            await self.send_message(websocket, response, session_id)
+            await self.send_message(websocket, response, session_id, query_id)
             self.agent_managers.pop(session_id)
 
         else:
-            await self.send_message(websocket, {"error": f"Unknown method: {method}"}, session_id)
+            await self.send_message(websocket, {"error": f"Unknown method: {method}"}, session_id, query_id)
 
         self.logger.info("End of message.")
-        await self.send_message(websocket, BaseConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
+        await self.send_message(websocket, BaseConnectionManager.END_OF_MESSAGE_RESPONSE, session_id, query_id)
