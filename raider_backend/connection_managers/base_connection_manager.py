@@ -62,6 +62,10 @@ class BaseConnectionManager(ABC):
         self.message_buffer[session_id].append(message)
         self.logger.info("Message added to buffer for session %s", session_id)
 
+        if len(self.message_buffer[session_id]) > 10:
+            self.logger.debug("More than 10 message in buffer for session %s", session_id)
+            await asyncio.sleep(0.1)
+
     async def send_buffered_messages(
             self,
             websocket: WebSocket,
@@ -72,8 +76,6 @@ class BaseConnectionManager(ABC):
         :param websocket: The WebSocket connection to send the buffered
             messages to.
         """
-        # TODO: when send_message is called rapidly, this method gets blocked
-        # may need to run on a seperate thread
         while True:
             self.logger.info("Checking for buffered messages for session %s", session_id)
             if session_id in self.message_buffer and self.message_buffer[session_id]:
