@@ -51,36 +51,42 @@ class BaseConnectionManager(ABC):
     async def send_message(self, websocket: WebSocket,
                            message: Dict[str, Any], session_id: str) -> None:
         """
-        Sends a message to a specific WebSocket connection. If the
-        connection is disconnected, the message is buffered.
+        Appends the message to the buffer for the given session.
 
         :param websocket: The WebSocket connection to send the message
             to.
         :param message: The message to send.
         """
-        try:
-            await websocket.send_json(message)
-        except WebSocketDisconnect:
-            self.message_buffer[session_id].append(message)
-            self.logger.warning("Message buffered due to disconnection")
+        if session_id not in self.message_buffer:
+            self.message_buffer[session_id] = []
+        self.message_buffer[session_id].append(message)
+        self.logger.info("Message added to buffer for session %s", session_id)
 
     async def send_buffered_messages(
             self,
             websocket: WebSocket,
             session_id: str) -> None:
         """
-        Sends all buffered messages to a specific WebSocket connection.
+        Continuously sends buffered messages for a specific session.
 
         :param websocket: The WebSocket connection to send the buffered
             messages to.
         """
-        if session_id not in self.message_buffer:
-            return
-
-        while self.message_buffer[session_id]:
-            buffered_message = self.message_buffer[session_id].pop(0)
-            await self.send_message(websocket, buffered_message, session_id)
-            self.logger.info("Sent buffered message: %s", buffered_message)
+        # TODO: when send_message is called rapidly, this method gets blocked
+        # may need to run on a seperate thread
+        while True:
+            self.logger.info("Checking for buffered messages for session %s", session_id)
+            if session_id in self.message_buffer and self.message_buffer[session_id]:
+                message = self.message_buffer[session_id][0]
+                try:
+                    await websocket.send_json(message)
+                    self.message_buffer[session_id].pop(0)
+                    self.logger.info("Sent buffered message: %s", message)
+                except WebSocketDisconnect:
+                    self.logger.warning("Failed to send message due to disconnection")
+                    await asyncio.sleep(1) # Wait before retrying
+            else:
+                await asyncio.sleep(0.1) # Short sleep when no message
 
     async def send_keepalive_pings(
             self,
@@ -117,12 +123,10 @@ class BaseConnectionManager(ABC):
             disconnected.
         """
         await self._on_connect(websocket, session_id)
-        keepalive_task = asyncio.create_task(
-            self.send_keepalive_pings(websocket, session_id))
+        keepalive_task = asyncio.create_task(self.send_keepalive_pings(websocket, session_id))
+        buffered_messages_task = asyncio.create_task(self.send_buffered_messages(websocket, session_id))
 
         try:
-            await self.send_buffered_messages(websocket, session_id)
-
             while True:
                 data = await websocket.receive_json()
                 self.logger.info("Received data: %s", data)
@@ -132,7 +136,8 @@ class BaseConnectionManager(ABC):
             await self._on_disconnect(websocket)
         finally:
             keepalive_task.cancel()
-            self.logger.info("Keepalive task cancelled")
+            buffered_messages_task.cancel()
+            self.logger.info("Keepalive and buffered messages tasks cancelled")
 
     def ping(self) -> str:
         result = "pong"
