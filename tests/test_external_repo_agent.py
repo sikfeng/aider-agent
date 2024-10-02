@@ -10,8 +10,7 @@ from raider_backend import utils
 from raider_backend.connection_managers.base_connection_manager import BaseConnectionManager
 
 # Initialize logging
-LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(
-    "/tmp/test_external_repo_agent.log")
+LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_tmp_file("test_external_repo_agent")
 dictConfig(LOG_CONFIG)
 logger = logging.getLogger("TestExternalRepoAgent")
 

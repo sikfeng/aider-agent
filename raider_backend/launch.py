@@ -43,12 +43,14 @@ def main() -> None:
         '--port',
         type=int,
         help='Port of the websocket',
-        default=10000)
+        default=10000
+    )
     parser.add_argument(
         '--logfile',
         type=str,
         help='Path to logfile',
-        default="/tmp/manager.log")
+        default=utils.get_tmp_file("launch")
+    )
     
     # Parse command-line arguments
     args = parser.parse_args()
@@ -59,6 +61,7 @@ def main() -> None:
 
     # Set up logging
     logger = logging.getLogger("WebSocketEndpoint")
+    logger.info("Logging to %s", args.logfile)
     
     # Remove existing log file if it exists
     if Path(LOG_CONFIG['handlers']['fileHandler']['filename']).is_file():

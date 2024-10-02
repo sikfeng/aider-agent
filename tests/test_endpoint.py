@@ -10,8 +10,7 @@ from raider_backend import utils
 from raider_backend.connection_managers.base_connection_manager import BaseConnectionManager
 
 # Initialize logging
-LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(
-    "/tmp/test_endpoint.log")
+LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_tmp_file("endpoint")
 dictConfig(LOG_CONFIG)
 logger = logging.getLogger("TestEndpoint")
 
@@ -48,8 +47,8 @@ async def test_websocket_endpoint(uri, main_repo_dir, method, params=None):
 
 async def test():
     uri = f"ws://localhost:{PORT}/ws/tmp_session_id"
-    main_repo_dir = "/workspace/tmp_repo/"
-    main_repo_dir2 = "/workspace/tmp_repo2/"
+    main_repo_dir = "../tmp_repo/"
+    main_repo_dir2 = "../tmp_repo2/"
 
     external_repos = ["../cody", "../auto-code-rover"]
     external_repos2 = ["../react", "../sheetjs"]

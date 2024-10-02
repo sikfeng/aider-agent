@@ -2,7 +2,7 @@ from typing import Any, Dict
 
 from fastapi import WebSocket
 
-from raider_backend.handlers.agent_manager_handler import AgentManagerHandler
+from raider_backend.handlers.agent_manager_handler import AgentManagerHandler, InitAgentManagerError
 from raider_backend.connection_managers.base_connection_manager import BaseConnectionManager
 
 class LaunchConnectionManager(BaseConnectionManager):
@@ -27,7 +27,11 @@ class LaunchConnectionManager(BaseConnectionManager):
         method = data.get("method")
         params = data.get("params", {})
 
-        async for response in self.agent_manager_handler.handle_message(
-            session_id=session_id, main_repo_dir=main_repo_dir, method=method, params=params):
-            await self.send_message(websocket, response, session_id)
-        await self.send_message(websocket, BaseConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)
+        try:
+            async for response in self.agent_manager_handler.handle_message(
+                session_id=session_id, main_repo_dir=main_repo_dir, method=method, params=params):
+                await self.send_message(websocket, response, session_id)
+        except InitAgentManagerError as e:
+            await self.send_message(websocket, {"error": str(e)}, session_id)
+        finally:
+            await self.send_message(websocket, BaseConnectionManager.END_OF_MESSAGE_RESPONSE, session_id)

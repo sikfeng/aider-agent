@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import websockets
 
 from raider_backend import utils
@@ -16,6 +17,10 @@ class AgentManagerHandler(BaseHandler):
     def initialize_agent(self, repo_dir: str, timeout: int):
         # Initializes AgentManager with MainRepoAgent at repo_dir
         repo_dir = utils.get_absolute_path(repo_dir)
+        if not Path(repo_dir).exists():
+            error_msg = f"Failed to initialize AgentManager on {repo_dir}. Directory does not exist."
+            self.logger.error(error_msg)
+            raise InitAgentManagerError(error_msg)
         command = f"init_agent_manager --main-repo-dir {repo_dir} --port {{port}}"
         process, port = self._init_process(repo_dir, command, directory=repo_dir, timeout=timeout)
         if process and port:
@@ -26,7 +31,9 @@ class AgentManagerHandler(BaseHandler):
             }
             self.logger.info("Agent %s initialized", repo_dir)
         else:
-            raise InitAgentManagerError(f"Failed to initialize AgentManager on {repo_dir}.")
+            error_msg = f"Failed to initialize AgentManager on {repo_dir}. Timeout exceeded."
+            self.logger.error(error_msg)
+            raise InitAgentManagerError(error_msg)
 
     async def handle_message(self, main_repo_dir: str, session_id: str, method: str, params: dict): 
         main_repo_dir = utils.get_absolute_path(main_repo_dir)

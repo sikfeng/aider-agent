@@ -7,8 +7,10 @@ manipulation, synchronous and asynchronous LLM completion, and retry
 mechanisms for strict JSON parsing.
 """
 import asyncio
+import datetime
 from functools import partial
 from pathlib import Path
+import tempfile
 
 import litellm
 from litellm import acompletion, completion
@@ -17,6 +19,16 @@ from strictjson import strict_json, strict_json_async
 litellm.suppress_debug_info = True
 litellm.set_verbose = True
 litellm.drop_params = True
+
+
+def get_tmp_file(name: str) -> str:
+    """
+    Generate a temporary file path.
+
+    :param name: The name of the temporary file.
+    :return: The temporary file path.
+    """
+    return str(Path(tempfile.gettempdir()) / f"name_{datetime.datetime.now()}.log")
 
 
 def get_absolute_path(path: str) -> str:
