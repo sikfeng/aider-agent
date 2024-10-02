@@ -56,16 +56,7 @@ def main() -> None:
     args = parser.parse_args()
 
     # Configure logging
-    LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(
-        args.logfile)
-
-    # Set up logging
-    logger = logging.getLogger("WebSocketEndpoint")
-    logger.info("Logging to %s", args.logfile)
-    
-    # Remove existing log file if it exists
-    if Path(LOG_CONFIG['handlers']['fileHandler']['filename']).is_file():
-        Path(LOG_CONFIG['handlers']['fileHandler']['filename']).unlink()
+    LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(args.logfile)
     
     # Apply logging configuration
     dictConfig(LOG_CONFIG)

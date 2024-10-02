@@ -241,9 +241,20 @@ def main():
                         help="Main repository directory")
     parser.add_argument("--model-name", type=str, default="azure/gpt-4o",
                         help="Model name for the AgentManager")
+    parser.add_argument(
+        '--logfile',
+        type=str,
+        help='Path to logfile',
+        default=utils.get_tmp_file("agent_manager"),
+    )
+
+    # Parse command-line arguments
     args = parser.parse_args()
 
     # Configure logging
+    LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(args.logfile)
+
+    # Apply logging configuration
     dictConfig(LOG_CONFIG)
 
     # Set the working directory to the main repository directory
