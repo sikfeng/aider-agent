@@ -60,7 +60,7 @@ class BaseConnectionManager(ABC):
         if session_id not in self.message_buffer:
             self.message_buffer[session_id] = []
         self.message_buffer[session_id].append(message)
-        self.logger.info("Message added to buffer for session %s", session_id)
+        self.logger.debug("Message added to buffer for session %s", session_id)
 
         if len(self.message_buffer[session_id]) > 10:
             self.logger.debug("More than 10 message in buffer for session %s", session_id)
@@ -77,13 +77,13 @@ class BaseConnectionManager(ABC):
             messages to.
         """
         while True:
-            self.logger.info("Checking for buffered messages for session %s", session_id)
+            self.logger.debug("Checking for buffered messages for session %s", session_id)
             if session_id in self.message_buffer and self.message_buffer[session_id]:
                 message = self.message_buffer[session_id][0]
                 try:
                     await websocket.send_json(message)
                     self.message_buffer[session_id].pop(0)
-                    self.logger.info("Sent buffered message: %s", message)
+                    self.logger.debug("Sent buffered message: %s", message)
                 except WebSocketDisconnect:
                     self.logger.warning("Failed to send message due to disconnection")
                     await asyncio.sleep(1) # Wait before retrying
