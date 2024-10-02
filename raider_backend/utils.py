@@ -28,7 +28,8 @@ def get_tmp_file(name: str) -> str:
     :param name: The name of the temporary file.
     :return: The temporary file path.
     """
-    return str(Path(tempfile.gettempdir()) / f"name_{datetime.datetime.now().strftime('%Y-%m-%d %Hh%Mm%Ss')}.log")
+    (Path(tempfile.gettempdir()) / "raider_backend").mkdir(parents=True, exist_ok=True)
+    return str(Path(tempfile.gettempdir()) / "raider_backend" / f"{name}_{datetime.datetime.now().strftime('%Y-%m-%d %Hh%Mm%Ss')}.log")
 
 
 def get_absolute_path(path: str) -> str:
