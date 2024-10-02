@@ -39,6 +39,10 @@ class AgentManagerHandler(BaseHandler):
         main_repo_dir = utils.get_absolute_path(main_repo_dir)
 
         if method == "init_agent_manager":
+            if main_repo_dir in self.agents:
+                self.logger.info("Agent %s already initialized", main_repo_dir)
+                yield {"error": f"AgentManager on {main_repo_dir} already initialized"}
+                return
             timeout = params.get("timeout", 10)
             self.initialize_agent(main_repo_dir, timeout)
             return
