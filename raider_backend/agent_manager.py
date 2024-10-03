@@ -232,6 +232,18 @@ class AgentManager:
         self.logger.info(f"Disabled external repo agent for {repo_dir}")
         return {"result": "Success"}
 
+    def enable_external_repo_agent(self, repo_dir: str) -> Dict[str, str]:
+        """
+        Enable a previously disabled external repo agent.
+
+        :param repo_dir: The directory of the repository to enable.
+        :return: A dictionary with the result of the operation.
+        """
+        repo_dir = utils.get_absolute_path(repo_dir)
+        self.external_repo_agent_handler.enable_agent(repo_dir)
+        self.logger.info(f"Enabled external repo agent for {repo_dir}")
+        return {"result": "Success"}
+
 def main():
     # Initialize the connection manager for AgentManager
     from raider_backend.connection_managers.agent_manager_connection_manager import AgentManagerConnectionManager

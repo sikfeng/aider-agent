@@ -37,6 +37,19 @@ class ExternalRepoAgentHandler(BaseHandler):
         """
         return repo_dir in self.disabled_agents
 
+    def enable_agent(self, repo_dir: str) -> None:
+        """
+        Enable a previously disabled agent for a specific repo directory.
+
+        :param repo_dir: The directory of the repository to enable.
+        """
+        repo_dir = utils.get_absolute_path(repo_dir)
+        if repo_dir in self.disabled_agents:
+            self.disabled_agents.remove(repo_dir)
+            self.logger.info(f"Enabled external repo agent for {repo_dir}")
+        else:
+            self.logger.info(f"Agent for {repo_dir} was not disabled")
+
     def _get_agent_port(self, agent_id: str) -> int:
         if agent_id not in self.agents:
             raise ValueError(f"Agent {agent_id} not initialized")
