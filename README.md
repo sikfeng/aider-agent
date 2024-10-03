@@ -102,13 +102,12 @@ The system provides WebSocket endpoints for interacting with the agents:
 
 - **WebSocket Endpoint**: `ws://<host>:<port>/ws/{session_id}`
 
-  This endpoint is managed by the `LaunchConnectionManager`, which acts as an intermediary between the external client and the `AgentManagerHandler`.
+  This endpoint is managed by the `AgentManagerConnectionManager`, which acts as an intermediary between the external client and the `AgentManager`.
 
   When sending messages to this endpoint, use the following JSON format:
 
   ```json
   {
-    "main_repo_dir": "<path_to_main_repo>",
     "method": "<method_name>",
     "params": {
       "<param1>": "<value1>",
@@ -117,8 +116,6 @@ The system provides WebSocket endpoints for interacting with the agents:
     }
   }
   ```
-
-  The `main_repo_dir` parameter is required for all methods and specifies the directory of the main repository being worked on.
 
   Available methods include:
 
@@ -138,9 +135,21 @@ The system provides WebSocket endpoints for interacting with the agents:
     - **Params**: 
       - `subtask` (str): The subtask to run.
 
+  - `generate_commands`: Generates commands for a given subtask.
+    - **Params**:
+      - `subtask` (str): The subtask for which to generate commands.
+
   - `undo`: Undoes the last commit.
 
   - `shutdown`: Shuts down the AgentManager.
+
+  - `disable_external_repo_agent`: Disables an external repository agent.
+    - **Params**:
+      - `agent_id` (str): The ID of the agent to disable.
+
+  - `enable_external_repo_agent`: Enables a previously disabled external repository agent.
+    - **Params**:
+      - `agent_id` (str): The ID of the agent to enable.
 
 #### Example
 
