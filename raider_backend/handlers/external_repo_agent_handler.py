@@ -67,7 +67,7 @@ class ExternalRepoAgentHandler(BaseHandler):
 
     def initialize_agent(self, agent_id: str, repo_dir: str, model_name: str = "azure/gpt-4o", timeout: int = 10):
         repo_dir = utils.get_absolute_path(repo_dir)
-        command = f"exec init_ext_repo_agent --port {{port}} --model-name {model_name}"
+        command = f"init_ext_repo_agent --port {{port}} --model-name {model_name}"
         process, port = self._init_process(agent_id, command, directory=repo_dir, timeout=timeout)
         if process and port:
             self.agents[agent_id] = {
