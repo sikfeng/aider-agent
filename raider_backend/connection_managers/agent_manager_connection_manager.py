@@ -60,6 +60,15 @@ class AgentManagerConnectionManager(BaseConnectionManager):
             await self.send_message(websocket, response, session_id)
             self.agent_managers.pop(session_id)
 
+        elif method == "disable_external_repo_agent":
+            agent_id = params.get("agent_id")
+            if agent_id:
+                result = agent_manager.disable_external_repo_agent(agent_id)
+                response = {"result": "Success" if result else "Failure"}
+            else:
+                response = {"error": "Missing agent_id parameter"}
+            await self.send_message(websocket, response, session_id)
+
         else:
             await self.send_message(websocket, {"error": f"Unknown method: {method}"}, session_id)
 

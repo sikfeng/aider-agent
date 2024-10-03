@@ -18,6 +18,24 @@ class InitExternalRepoAgentError(RuntimeError):
 class ExternalRepoAgentHandler(BaseHandler):
     def __init__(self):
         super().__init__()
+        self.disabled_agents: set = set()
+
+    def disable_agent(self, repo_dir: str) -> None:
+        """
+        Disable an agent for a specific repo directory.
+
+        :param repo_dir: The directory of the repository to disable.
+        """
+        self.disabled_agents.add(repo_dir)
+
+    def is_agent_disabled(self, repo_dir: str) -> bool:
+        """
+        Check if an agent for a specific repo directory is disabled.
+
+        :param repo_dir: The directory of the repository to check.
+        :return: True if the agent is disabled, False otherwise.
+        """
+        return repo_dir in self.disabled_agents
 
     def _get_agent_port(self, agent_id: str) -> int:
         if agent_id not in self.agents:

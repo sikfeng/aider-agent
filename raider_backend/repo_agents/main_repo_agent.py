@@ -43,30 +43,30 @@ class MainRepoAgent(BaseRepoAgent):
         """
         self.logger.info("Starting to run %s.", subtask)
         self.logger.info("Querying ExternalRepoAgentHandlers.")
-        """
-        await asyncio.gather(*(self.agent_manager.external_repo_agent_handler.find_relevant_code(agent_id=repo_dir, task=subtask)
-                               for repo_dir
-                               in self.agent_manager.external_repo_agent_handler.agents.keys()))
-        """
         for repo_dir in self.agent_manager.external_repo_agent_handler.agents.keys():
-            await self.agent_manager.external_repo_agent_handler.find_relevant_code(agent_id=repo_dir, task=subtask, session_id=session_id)
-            self.logger.info("Finished searching %s", repo_dir)
-            yield {"info": f"Finished searching {repo_dir}"}
+            if not self.agent_manager.external_repo_agent_handler.is_agent_disabled(repo_dir):
+                await self.agent_manager.external_repo_agent_handler.find_relevant_code(agent_id=repo_dir, task=subtask, session_id=session_id)
+                self.logger.info("Finished searching %s", repo_dir)
+                yield {"info": f"Finished searching {repo_dir}"}
+            else:
+                self.logger.info("Skipping disabled repo %s", repo_dir)
+                yield {"info": f"Skipped disabled repo {repo_dir}"}
 
         for agent_id in self.agent_manager.external_repo_agent_handler.agents.keys():
-            code_snippet_filename = f"code_snippets_{agent_id.replace('/', '').replace('.', '')}.txt"
-            if not Path(code_snippet_filename).is_file():
-                self.logger.warning(
-                    "Did not find %s, skipping.", code_snippet_filename)
-                continue
+            if not self.agent_manager.external_repo_agent_handler.is_agent_disabled(agent_id):
+                code_snippet_filename = f"code_snippets_{agent_id.replace('/', '').replace('.', '')}.txt"
+                if not Path(code_snippet_filename).is_file():
+                    self.logger.warning(
+                        "Did not find %s, skipping.", code_snippet_filename)
+                    continue
 
-            self.logger.info("Found %s.", code_snippet_filename)
-            try:
-                self.coder.commands.cmd_read_only(
-                    code_snippet_filename)
-            except BaseException:
-                self.logger.warning(
-                    "Error adding %s, skipping.", code_snippet_filename)
+                self.logger.info("Found %s.", code_snippet_filename)
+                try:
+                    self.coder.commands.cmd_read_only(
+                        code_snippet_filename)
+                except BaseException:
+                    self.logger.warning(
+                        "Error adding %s, skipping.", code_snippet_filename)
 
         # TODO: move prompt to prompts.py
         # TODO: consider using taskgen to do this

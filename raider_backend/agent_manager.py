@@ -221,6 +221,17 @@ class AgentManager:
         self.external_repo_agent_handler.kill_all_agents()
         return {"result": "shutdown"}
 
+    def disable_external_repo_agent(self, repo_dir: str) -> None:
+        """
+        Disable an external repo agent.
+
+        :param repo_dir: The directory of the repository to disable.
+        """
+        repo_dir = utils.get_absolute_path(repo_dir)
+        self.external_repo_agent_handler.disable_agent(repo_dir)
+        self.logger.info(f"Disabled external repo agent for {repo_dir}")
+        return {"result": "Success"}
+
 def main():
     # Initialize the connection manager for AgentManager
     from raider_backend.connection_managers.agent_manager_connection_manager import AgentManagerConnectionManager
