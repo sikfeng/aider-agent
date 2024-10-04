@@ -77,7 +77,7 @@ class PlannerAgent:
             response = ""
             for _ in range(self.max_reflections):
                 curr_response = ""
-                async for response_chunk in self.agent_manager.main_repo_agent.ask(query_message):
+                async for response_chunk in self.agent_manager.main_repo_agent.ask(query_message + "\n\nPlease respond in English."):
                     curr_response += response_chunk
                 response += curr_response + "\n\n"
                 if self.agent_manager.main_repo_agent.coder.reflected_message is None:
@@ -89,6 +89,8 @@ class PlannerAgent:
         def finetune_codebase_summary_and_plan(shared_variables, additional_info:str):
             """
             Incorporates additional info to summary of codebase, and finetunes the plan.
+            Additional info should contain information about what has already been implemented, and what is not implemented yet.
+            Try to use specific instructions in `additional_info` to finetune the plan.
 
             :param shared_variables: A dictionary containing 'Summary' and 'Plan' keys.
             :param additional_info: Additional information to incorporate into the summary and plan.
@@ -111,7 +113,7 @@ class PlannerAgent:
 
         agent = AsyncAgent(
             "Code planner",
-            "Help user to plan tasks to ensure that the code fufils a requirement. Ensure that the Plan in the Global Context will implement the user's objective.",
+            """Plan a list of tasks to fufil the user's objective. Some functionality may have already been completed, so use `query_codebase` to query the codebase for more information. Avoid reimplementing existing functionality.""",
             llm = utils.llm_async(tmp_model_name),
             shared_variables = {"Plan": "", "Summary": ""},
             default_to_llm = False,
@@ -135,10 +137,36 @@ class PlannerAgent:
             self.logger.warning("Planner exceeded maximum iterations.")
         
         if not agent.shared_variables["Plan"]:
-            self.logger.warning("Plan is empty")
-            yield {"warning": {"Plan": "Plan is empty. Either the task was already completed and no plan is necessary, or an error had occurred."}}
-            return
-        
+            res = await utils.strict_json_retry(
+                system_prompt="Based on the conversation determine whether the objective has already been completed and no further actions are required. If it has, return 'Completed: True'. If it has not, return 'Completed: False'.",
+                user_prompt=f"""**Objective**: {objective}
+
+**Conversation history**:
+{agent.subtasks_completed}
+""",
+                output_format={
+                    "Completed": "Whether the task has already been completed, type: bool",
+                },
+                llm=utils.llm(self.model_name),
+            )
+            if res:
+                if res["Completed"]:
+                    agent.shared_variables["Plan"] = "[Task 1]\n\nNo plan necessary.\n\n[TASK TYPE: User action]"
+                else:
+                    # TODO: get conversation history from agent and forcefully genenerate a plan
+                    yield {"warning": {"Plan": "Plan was empty. An error may have occurred. Forcefully generating a plan based on agent conversation history."}}
+                    system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_FINETUNE_PLAN
+                    user_prompt = f"""Objective: {objective}
+
+Conversation history:
+{agent.subtasks_completed}
+"""
+                    finetuned_plan = utils.llm(self.model_name)(
+                        system_prompt=system_prompt,
+                        user_prompt=user_prompt,
+                    )
+                    agent.shared_variables["Plan"] = finetuned_plan
+
         self.logger.info("Generated plan: %s", agent.shared_variables["Plan"])
 
         def _parse_tasks(text):
@@ -158,7 +186,7 @@ class PlannerAgent:
             parsed_tasks = []
             for task in tasks:
                 task_body = task[1].strip()
-                task_type = task[2]
+                task_type = task[2].strip() # TODO: what if the LLM didn't return the task type in the exact format I specified? Might need to do edit distance matching
                 parsed_tasks.append({
                     'task_body': task_body,
                     'task_type': task_type

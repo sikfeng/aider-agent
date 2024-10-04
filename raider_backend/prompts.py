@@ -9,7 +9,7 @@ class PlannerAgentPrompts:
     Contains prompt templates for PlannerAgent
     """
     SYSTEM_PROMPT_FINETUNE_CODEBASE_SUMMARY = """
-Finetune the codebase summary with additional info. The summary should focus on what are the functionality already implemented, and what functionality is not implemented yet.
+Finetune the codebase summary with additional info. The summary should focus on what are the functionality already implemented, and what functionality is not implemented yet. Respond in English.
 """
 
     USER_PROMPT_FINETUNE_CODEBASE_SUMMARY = """
@@ -19,7 +19,7 @@ Finetune the codebase summary with additional info. The summary should focus on 
 """
 
     SYSTEM_PROMPT_FINETUNE_PLAN = """
-Finetune the plan using additional info.
+Finetune the plan using additional info. Respond in English.
 
 Ensure each task:
 - Is specific, with a clear, detailed description.
