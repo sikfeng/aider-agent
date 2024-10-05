@@ -103,8 +103,11 @@ class AgentManager:
         agent_id = repo_dir
         if agent_id in self.external_repo_agent_handler.agents:
             self.logger.warning(
-                "Attempt to initialize a new ExternalRepoAgent on already "
-                "initialized repo, skipping.")
+                "Attempt to initialize a new ExternalRepoAgent on already initialized repo.")
+            if self.external_repo_agent_handler.is_agent_disabled(agent_id):
+                self.logger.info(
+                    "ExternalRepoAgent on %s is disabled. Enabling now.", repo_dir, repo_dir)
+                return True
             return False
 
         try:
