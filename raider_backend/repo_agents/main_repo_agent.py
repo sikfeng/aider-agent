@@ -41,6 +41,9 @@ class MainRepoAgent(BaseRepoAgent):
         :param subtask: The subtask to run.
         :return: An async generator yielding parts of the response.
         """
+        self.agent_manager.main_repo_agent.reset()
+        self.logger.info("Reset MainRepoAgent coder.")
+
         self.logger.info("Starting to run %s.", subtask)
         self.logger.info("Querying ExternalRepoAgentHandlers.")
         for repo_dir in self.agent_manager.external_repo_agent_handler.agents.keys():
@@ -71,12 +74,94 @@ class MainRepoAgent(BaseRepoAgent):
         # TODO: move prompt to prompts.py
         # TODO: consider using taskgen to do this
         # but runtime and llm calls would increase
+
+        # TODO: retrieve files to add to chat
+        #repo_map = self.get_repo_map()
         message = f"""
-You are to complete the following task:
+The following task is to be completed:
+{subtask}
+
+From the repository, please provide me with the a list of files you will need to edit. Provide their full paths, one per line. Do not include any preamble.
+
+Output Format:
+---------------
+
+<file path 1>
+
+<file path 2>
+
+...
+
+<file path N>
+"""
+        response = ""
+        for partial_response in self.ask(message):
+            response += partial_response
+
+        for filepath in response.split("\n"):
+            filepath = filepath.strip()
+            if not filepath:
+                continue
+            try:
+                if Path(filepath).exists():
+                    self.coder.commands.cmd_add(filepath)
+                    self.logger.info("Added %s.", filepath)
+                else:
+                    self.logger.warning("File %s does not exist, skipping.", filepath)
+            except OSError:
+                self.logger.warning("Filepath %s is too long, skipping.", filepath)
+
+        self.logger.info("Files added: %s", str(self.coder.abs_fnames))
+        self.coder.commands.cmd_clear(None)
+        self.logger.info("Cleared chat history from MainRepoAgent coder.")
+
+        search_replace_rules = """
+*SEARCH/REPLACE block* Rules:
+
+Every *SEARCH/REPLACE block* must use this format:
+1. The *FULL* file path alone on a line, verbatim. No bold asterisks, no quotes around it, no escaping of characters, etc.
+2. The opening fence and code language, eg: ```python
+3. The start of search block: <<<<<<< SEARCH
+4. A contiguous chunk of lines to search for in the existing source code
+5. The dividing line: =======
+6. The lines to replace into the source code
+7. The end of the replace block: >>>>>>> REPLACE
+8. The closing fence: ```
+
+Use the *FULL* file path, as shown to you by the user.
+
+Every *SEARCH* section must *EXACTLY MATCH* the existing file content, character for character, including all comments, docstrings, etc.
+If the file contains code or other data wrapped/escaped in json/xml/quotes or other containers, you need to propose edits to the literal contents of the file, including the container markup.
+
+*SEARCH/REPLACE* blocks will replace *all* matching occurrences.
+Include enough lines to make the SEARCH blocks uniquely match the lines to change.
+
+Keep *SEARCH/REPLACE* blocks concise.
+Break large *SEARCH/REPLACE* blocks into a series of smaller blocks that each change a small portion of the file.
+Include just the changing lines, and a few surrounding lines if needed for uniqueness.
+Do not include long runs of unchanging lines in *SEARCH/REPLACE* blocks.
+
+Only create *SEARCH/REPLACE* blocks for files that the user has added to the chat!
+
+To move code within a file, use 2 *SEARCH/REPLACE* blocks: 1 to delete it from its current location, 1 to insert it in the new location.
+
+Pay attention to which filenames the user wants you to edit, especially if they are asking you to create a new file.
+
+If you want to put code in a new file, use a *SEARCH/REPLACE block* with:
+- A new file path, including dir name if needed
+- An empty `SEARCH` section
+- The new file's contents in the `REPLACE` section
+"""
+
+        message = f"""
 {subtask}
 
 If the files you wish to write to do not exist yet, automatically create them.
-If you wish to edit a file, add the file to the chat.
+If you wish to edit a file that is not already added, add the file to the chat.
+
+REMEMBER TO USE SEARCH/REPLACE BLOCKS TO EDIT FILES!!!
+
+{search_replace_rules}
 """
         response = ""
         for _ in range(self.max_reflections):
@@ -100,6 +185,8 @@ If you wish to edit a file, add the file to the chat.
                 break
 
             message = self.coder.reflected_message
+
+        self.logger.info("Response: %s", response)
 
         self.commit()
 

@@ -11,7 +11,7 @@ import logging
 import re
 from typing import AsyncGenerator, List, Dict, TYPE_CHECKING
 
-from taskgen import AsyncAgent
+from taskgen import Agent
 
 from raider_backend import utils
 from raider_backend.prompts import PlannerAgentPrompts
@@ -62,7 +62,7 @@ class PlannerAgent:
         if tmp_model_name not in ["azure/gpt-4o", "bedrock/mistral.mistral-large-2407-v1:0"]:
             tmp_model_name = "azure/gpt-4o"
 
-        async def query_codebase(query_message: str) -> str:
+        def query_codebase(query_message: str) -> str:
             """
             Ask a Codebase AI assistant questions about the existing codebase.
             The assistant can only read the codebase and answer queries.
@@ -77,7 +77,7 @@ class PlannerAgent:
             response = ""
             for _ in range(self.max_reflections):
                 curr_response = ""
-                async for response_chunk in self.agent_manager.main_repo_agent.ask(query_message + "\n\nPlease respond in English."):
+                for response_chunk in self.agent_manager.main_repo_agent.ask(query_message + "\n\nPlease respond in English."):
                     curr_response += response_chunk
                 response += curr_response + "\n\n"
                 if self.agent_manager.main_repo_agent.coder.reflected_message is None:
@@ -111,10 +111,14 @@ class PlannerAgent:
             )
             shared_variables["Plan"] = finetuned_plan
 
-        agent = AsyncAgent(
+        agent = Agent(
             "Code planner",
-            """Plan a list of tasks to fufil the user's objective. Some functionality may have already been completed, so use `query_codebase` to query the codebase for more information. Avoid reimplementing existing functionality.""",
-            llm = utils.llm_async(tmp_model_name),
+            """
+            Plan a list of tasks to fufil the user's objective.
+            Avoid reimplementing existing functionality.
+            When files need to be edited, find out the filenames that need to be edited and include them in the plan.
+            """,
+            llm = utils.llm(tmp_model_name),
             shared_variables = {"Plan": "", "Summary": ""},
             default_to_llm = False,
             max_subtasks = self.max_iterations,
@@ -126,7 +130,7 @@ class PlannerAgent:
         for _ in range(agent.max_subtasks):
             if agent.task_completed:
                 break
-            await agent.run(f"User objective: {objective}", num_subtasks=1)
+            agent.run(f"User objective: {objective}", num_subtasks=1)
             if agent.shared_variables["Plan"]:
                 self.logger.info("Tentative plan: %s", agent.shared_variables["Plan"])
                 yield {"info": {"Tentative plan": agent.shared_variables["Plan"]}}
@@ -137,35 +141,18 @@ class PlannerAgent:
             self.logger.warning("Planner exceeded maximum iterations.")
         
         if not agent.shared_variables["Plan"]:
-            res = await utils.strict_json_retry(
-                system_prompt="Based on the conversation determine whether the objective has already been completed and no further actions are required. If it has, return 'Completed: True'. If it has not, return 'Completed: False'.",
-                user_prompt=f"""**Objective**: {objective}
-
-**Conversation history**:
-{agent.subtasks_completed}
-""",
-                output_format={
-                    "Completed": "Whether the task has already been completed, type: bool",
-                },
-                llm=utils.llm(self.model_name),
-            )
-            if res:
-                if res["Completed"]:
-                    agent.shared_variables["Plan"] = "[Task 1]\n\nNo plan necessary.\n\n[TASK TYPE: User action]"
-                else:
-                    # TODO: get conversation history from agent and forcefully genenerate a plan
-                    yield {"warning": {"Plan": "Plan was empty. An error may have occurred. Forcefully generating a plan based on agent conversation history."}}
-                    system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_FINETUNE_PLAN
-                    user_prompt = f"""Objective: {objective}
+            yield {"warning": {"Plan": "Plan was empty. An error may have occurred. Forcefully generating a plan based on agent conversation history."}}
+            system_prompt = PlannerAgentPrompts.SYSTEM_PROMPT_FINETUNE_PLAN
+            user_prompt = f"""Objective: {objective}
 
 Conversation history:
 {agent.subtasks_completed}
 """
-                    finetuned_plan = utils.llm(self.model_name)(
-                        system_prompt=system_prompt,
-                        user_prompt=user_prompt,
-                    )
-                    agent.shared_variables["Plan"] = finetuned_plan
+            finetuned_plan = utils.llm(self.model_name)(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+            )
+            agent.shared_variables["Plan"] = finetuned_plan
 
         self.logger.info("Generated plan: %s", agent.shared_variables["Plan"])
 
