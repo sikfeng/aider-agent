@@ -35,13 +35,13 @@ class LaunchConnectionManager(BaseConnectionManager):
                 self.logger.error("Web Raider package not found")
                 raise e
             
-            response = json.dumps([
+            response = [
                 dict(
                     type=item.get("type", "").lower(),
                     name=item.get("name", ""),
                     url=item.get("url", "")
                 ) for item in json.loads(web_raider.pipeline_main(**params))
-            ])
+            ]
             await self.send_message(websocket, {"result": response}, session_id)
         
         else:
