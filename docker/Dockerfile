@@ -19,7 +19,7 @@ RUN chmod a+rwx /.aider /.cache
 #RUN git config --system --add safe.directory /workspace
 RUN git config --system --add safe.directory "*"
 
-ARG AIDER_VERSION=0.57.0
+ARG AIDER_VERSION=0.59.0
 
 FROM base AS aider
 

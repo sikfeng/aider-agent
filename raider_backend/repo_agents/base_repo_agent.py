@@ -43,7 +43,7 @@ class BaseRepoAgent:
             io=self.io,
             map_tokens=map_tokens,
             suggest_shell_commands=False,
-            chat_language="en-us",
+            chat_language="English",
         )
 
     def run(self, msg: str) -> str:
@@ -73,13 +73,13 @@ class BaseRepoAgent:
         self.coder = Coder.create(
             io=self.coder.io,
             from_coder=self.coder,
-            edit_format="code",
+            edit_format="architect",
             summarize_from_coder=False,
         )
         for partial_response in self.coder.run_stream(msg):
             yield partial_response
 
-    async def ask(self, msg: str) -> AsyncGenerator[str, None]:
+    def ask(self, msg: str):
         """Ask a question to the agent.
 
         :param msg: The question to ask.
