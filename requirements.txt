@@ -8,3 +8,4 @@ aider-chat==0.59.0
 websockets
 boto3
 taskgen-ai
+web-raider
