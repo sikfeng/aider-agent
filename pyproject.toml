@@ -1,25 +1,30 @@
-[build-system]
-requires = ["setuptools>=42", "wheel"]
-build-backend = "setuptools.build_meta"
-
-[project]
+[tool.poetry]
 name = "raider_backend"
 version = "0.0.1"
-description = "Autonomous Software Development"
+description = "Backend for Raider VS Code Extension"
+authors = ["Cheong Sik Feng <sikfeng@gmail.com>"]
 readme = "README.md"
-requires-python = ">=3.9,<3.13"
-dependencies = []
-
-[project.optional-dependencies]
-
-[project.urls]
-homepage = "https://github.com/sikfeng/raider-backend"
 repository = "https://github.com/sikfeng/raider-backend"
+homepage = "https://github.com/sikfeng/raider-backend"
 
-[project.scripts]
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+aider-chat = "0.59.0"
+fastapi = "^0.115.0"
+uvicorn = "^0.31.0"
+strictjson = "^5.1.3"
+taskgen = "^0.3.8.1"
+websockets = "^13.1"
+boto3 = "^1.35.34"
+litellm = "1.47.0"
+
+[tool.poetry.dev-dependencies]
+
+[tool.poetry.scripts]
 init_agent_manager = "raider_backend.agent_manager:main"
 init_ext_repo_agent = "raider_backend.repo_agents.external_repo_agent:main"
 launch_endpoint = "raider_backend.launch:main"
 
-[tool.setuptools.packages.find]
-where = ["."]
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

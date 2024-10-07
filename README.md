@@ -38,13 +38,23 @@ The Raider Backend system is designed to manage multiple agents that can perform
 
 ## Installation
 
+You can install the raider_backend package directly from PyPI using pip:
+
+```sh
+pip install raider_backend
+```
+
+This command will automatically download and install the latest version of raider_backend along with its dependencies.
+
+For developers who want to work on the raider_backend codebase:
+
 1. Clone the repository:
     ```sh
     git clone https://github.com/sikfeng/raider-backend.git
     cd raider-backend
     ```
 
-2. Install the raider_backend package and its dependencies:
+2. Install the package in editable mode:
     ```sh
     pip install -e .
     ```
