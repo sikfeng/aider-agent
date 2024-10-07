@@ -38,6 +38,11 @@ class AgentManagerConnectionManager(BaseConnectionManager):
             response = {"result": agents}
             await self.send_message(websocket, response, session_id)
 
+        elif method == "ask_repo":
+            async for response in agent_manager.ask_repo(**params):
+                self.logger.info("Response: %s", response)
+                await self.send_message(websocket, response, session_id)
+
         elif method == "generate_subtasks":
             async for response in agent_manager.generate_subtasks(**params):
                 self.logger.info("Response: %s", response)

@@ -157,6 +157,10 @@ class AgentManager:
             self.logger.error("PlannerAgent failed to initialize.")
             return False
 
+    async def ask_repo(self, query: str):
+        for partial_response in self.main_repo_agent.ask(query):
+            yield {"result": partial_response}
+
     async def generate_subtasks(self, objective: str):
         """
         Generate a list of subtasks to achieve the given objective.
