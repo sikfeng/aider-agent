@@ -51,9 +51,9 @@ async def test():
     main_repo_dir2 = "../tmp_repo2/"
 
     external_repos = ["../cody", "../auto-code-rover"]
-    external_repos2 = ["../react", "../sheetjs"]
     #task = "Make a basic hello world vscode extension"
-    task = "Add a react webview to the vscode extension"
+    #task = "Add a react webview to the vscode extension"
+    task = "Add a packet struct to the connection manager which will contain the type of packet, the type of content (result, info, warning, error), and the content"
 
     logger.info("Initializing agent manager on %s", main_repo_dir)
     await test_websocket_endpoint(uri, main_repo_dir, "init_agent_manager", {"timeout": 10})
@@ -65,21 +65,19 @@ async def test():
     logger.info("Getting external repo agents of %s", main_repo_dir)
     await test_websocket_endpoint(uri, main_repo_dir, "get_external_repo_agents")
 
-    for repo_dir in external_repos2:
-        logger.info("Initializing external repo agent for %s", repo_dir)
-        await test_websocket_endpoint(uri, main_repo_dir2, "init_external_repo_agent", {"repo_dir": repo_dir})
-
     logger.info("Getting external repo agents") # To verify that this is the same as before
     await test_websocket_endpoint(uri, main_repo_dir, "get_external_repo_agents")
 
     logger.info("Getting external repo agents")
     await test_websocket_endpoint(uri, main_repo_dir2, "get_external_repo_agents")
 
-    logger.info("Disabling %s external repo for %s",external_repos[-1], main_repo_dir) # To verify that this is the same as before
-    await test_websocket_endpoint(uri, main_repo_dir, "disable_external_repo_agent", {"agent_id": external_repos[-1]})
+    for repo_dir in external_repos:
+        logger.info("Disabling %s external repo for %s", repo_dir, main_repo_dir)
+        await test_websocket_endpoint(uri, main_repo_dir, "disable_external_repo_agent", {"agent_id": repo_dir})
 
-    logger.info("Enabling %s external repo for %s",external_repos[-1], main_repo_dir) # To verify that this is the same as before
-    await test_websocket_endpoint(uri, main_repo_dir, "enable_external_repo_agent", {"agent_id": external_repos[-1]})
+    for repo_dir in external_repos:
+        logger.info("Enabling %s external repo for %s", repo_dir, main_repo_dir)
+        await test_websocket_endpoint(uri, main_repo_dir, "enable_external_repo_agent", {"agent_id": repo_dir})
 
     logger.info("Generating subtasks for task: %s", task)
     subtasks = await test_websocket_endpoint(uri, main_repo_dir, "generate_subtasks", {"objective": task})
@@ -93,7 +91,7 @@ async def test():
         elif subtask["task_type"] == "Coding":
             await test_websocket_endpoint(uri, main_repo_dir, "run_subtask", {"subtask": subtask["task_body"]})
 
-    await test_websocket_endpoint(uri, main_repo_dir, "undo")
+    #await test_websocket_endpoint(uri, main_repo_dir, "undo")
 
     logger.info("Shutting down")
     await test_websocket_endpoint(uri, main_repo_dir, "shutdown")
