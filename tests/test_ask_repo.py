@@ -54,7 +54,7 @@ async def test():
     logger.info("Initializing agent manager on %s", main_repo_dir)
     await test_websocket_endpoint(uri, main_repo_dir, "init_agent_manager", {"timeout": 10})
 
-    logger.info("Generating subtasks for task: %s", query)
+    logger.info("Querying repo: %s", query)
     await test_websocket_endpoint(uri, main_repo_dir, "ask_repo", {"query": query})
 
     logger.info("Shutting down")

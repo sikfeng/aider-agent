@@ -91,6 +91,45 @@ class BaseRepoAgent:
             edit_format="ask",
             summarize_from_coder=False,
         )
+
+        message = f"""
+The following query has to be answered:
+{msg}
+
+From the repository, please provide me with the a list of files you will need to view. Provide their full paths, one per line. Do not include any preamble.
+
+Output Format:
+---------------
+
+<file path 1>
+
+<file path 2>
+
+...
+
+<file path N>
+"""
+        response = ""
+        for partial_response in self.coder.run_stream(message):
+            response += partial_response
+
+        for filepath in response.split("\n"):
+            filepath = filepath.strip()
+            if not filepath:
+                continue
+            try:
+                if Path(filepath).exists():
+                    self.coder.commands.cmd_add(filepath)
+                    self.logger.info("Added %s.", filepath)
+                else:
+                    self.logger.warning("File %s does not exist, skipping.", filepath)
+            except OSError:
+                self.logger.warning("Filepath %s is too long, skipping.", filepath)
+
+        self.logger.info("Files added: %s", str(self.coder.abs_fnames))
+        self.coder.commands.cmd_clear(None)
+        self.logger.info("Cleared chat history from MainRepoAgent coder.")
+
         for partial_response in self.coder.run_stream(msg):
             yield partial_response
 
