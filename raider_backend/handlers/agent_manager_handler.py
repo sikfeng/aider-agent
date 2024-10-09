@@ -21,7 +21,7 @@ class AgentManagerHandler(BaseHandler):
             error_msg = f"Failed to initialize AgentManager on {repo_dir}. Directory does not exist."
             self.logger.error(error_msg)
             raise InitAgentManagerError(error_msg)
-        command = f"init_agent_manager --main-repo-dir {repo_dir} --port {{port}}"
+        command = f"init_agent_manager --main-repo-dir '{repo_dir}' --port {{port}}"
         process, port = self._init_process(repo_dir, command, directory=repo_dir, timeout=timeout)
         if process and port:
             self.agents[repo_dir] = {
