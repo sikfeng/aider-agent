@@ -281,10 +281,6 @@ def main():
     # Parse command-line arguments
     args = parser.parse_args()
 
-    # some shells pass the single quotes directly to the argument, need to remove them
-    if args.main_repo_dir[0] == "'" and args.main_repo_dir[-1] == "'":
-        args.main_repo_dir = args.main_repo_dir[1:-1]
-
     # Configure logging
     LOG_CONFIG['handlers']['fileHandler']['filename'] = utils.get_absolute_path(args.logfile)
 
